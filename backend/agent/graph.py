@@ -188,10 +188,8 @@ def build_graph(ctx: RunContext):
         await _audit(ctx, final=False)  # audit the state as observed, including an open dialog: it is user-facing too
 
         product = s.goal.success.cart_contains
-        if product and not obs.dialog_open and "cart" in obs.route.lower():
-            # Reflects the MOST RECENT cart observation, not a historical "ever seen" flag: if the item
-            # is later removed and the cart is revisited, that must invalidate a prior sighting.
-            ctx.cart_product_seen = completion.cart_shows(obs, product)
+        if product:
+            ctx.cart_product_seen = completion.update_cart_seen(ctx.cart_product_seen, obs, product)
         verdict = completion.verify(s.goal, obs, s.journey_facts, ctx.cart_product_seen)
         if verdict.completed:
             s.goal_completed, s.goal_progress = True, 1.0

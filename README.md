@@ -69,10 +69,13 @@ Key design decisions:
 - **"The click happened" ≠ "the goal progressed".** A click that keeps the URL and opens a dialog becomes a
   high-severity friction finding. A click that times out because something covers the control becomes **blocked**
   (UX evidence), not a crash.
-- **LLM perceives, code verifies.** A price fact is kept only if its value is literally visible on the page.
-  Contradictions are computed in Python. Completion needs the route, a visible email field, and the goal product
-  having been shown in the cart. A model saying DONE is ignored unless the verifier agrees. Unverified AI
-  observations are labelled as such and never counted as defects.
+- **LLM perceives, code verifies.** A product-price fact is kept only when its exact visible amount is associated
+  with the named product in the same page region (no rounding). Contradictions are computed in Python and skipped
+  when a currency change fully explains the
+  difference. Completion checks the route, a visible email field, the goal product currently shown in the cart
+  (not merely ever seen there), and any price limit against the latest grounded fact for that product. A model
+  saying DONE is ignored unless the verifier agrees. Unverified AI observations are labelled as such and never
+  counted as defects.
 - **States are semantic fingerprints**, not URLs (canonical route + heading + dialog + controls + text). Closing
   the modal returns to the *same* Cart state, so the graph shows the detour as a loop.
 - **Replay** re-emits a recorded run's exact event stream (`contracts/websocket.md`) with the original timing.
@@ -112,9 +115,11 @@ returns nothing.
 ## Honest status
 
 - **Works:** the golden journey from goal text only passed 3/3 consecutive fresh-browser runs with local
-  `qwen2.5:7b` (6 actions, about 30 s). Dashboard, journey graph, audit, replay, health check and 13 tests all work.
+  `qwen2.5:7b` (6 actions, about 30 s). Dashboard, journey graph, audit, replay, health check and 35 tests all
+  work; the golden-journey integration test now starts its own demo-app server, so `pytest` no longer skips it.
 - **Limits:** tested only on our own demo shop so far. Screenshots are evidence only with the local model: the local
   vision model (`qwen3-vl:8b`) took 30–70 s per step, and the cloud vision providers are implemented but not yet
   benchmarked. Goal parsing and success criteria are rule-based and cover checkout/cart/login-style goals. The
   friction score is our own transparent heuristic, and the accessibility score is not a WCAG certification.
-- **Not built:** multi-path exploration, version A/B regression, keyboard-only/focus-order mode, mobile.
+- **Not built:** multi-path exploration (the current agent records one route at a time), version A/B regression,
+  keyboard-only/focus-order mode, mobile.

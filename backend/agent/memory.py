@@ -41,10 +41,58 @@ def _indian_grouping(n: int) -> str:
     return ",".join(groups + [tail])
 
 
+_MONEY = re.compile(
+    r"[₹$€£]\s*\d[\d,]*(?:\.\d{1,2})?|\b\d{1,3}(?:,\d{2,3})+(?:\.\d{1,2})?\b|\b\d+\.\d{1,2}\b")
+
+
+def _entity_spans(entity: str, text: str) -> list[tuple[int, int]]:
+    """Find visible product-name occurrences while allowing ordinary whitespace differences."""
+    normalized = " ".join(entity.split())
+    if not normalized:
+        return []
+    pattern = re.escape(normalized).replace(r"\ ", r"\s+")
+    return [m.span() for m in re.finditer(pattern, text, re.I)]
+
+
+def _gap(a: tuple[int, int], b: tuple[int, int]) -> int:
+    return max(b[0] - a[1], a[0] - b[1], 0)
+
+
+def _overlap(a: tuple[int, int], b: tuple[int, int]) -> bool:
+    return a[0] < b[1] and b[0] < a[1]
+
+
+def _associated_price(fact: ModelFact, text: str) -> bool:
+    """Require the claimed price to be the closest visible price to the named product.
+
+    This is deliberately conservative. A value elsewhere on a results page is not evidence that it belongs
+    to this product; the entity and amount must occur in the same short text region, with no closer price.
+    """
+    entities = _entity_spans(fact.entity, text)
+    if not entities:
+        return False
+    price_spans = [m.span() for m in _MONEY.finditer(text)]
+    candidates = []
+    for value in _price_variants(fact.value):
+        candidates.extend(m.span() for m in re.finditer(rf"(?<![\d,.]){re.escape(value)}(?![\d,])", text))
+    for entity in entities:
+        nearby = [p for p in price_spans if _gap(entity, p) <= 160]
+        if not nearby:
+            continue
+        closest = min(_gap(entity, p) for p in nearby)
+        closest_prices = [p for p in nearby if _gap(entity, p) == closest]
+        if any(_overlap(candidate, price) for candidate in candidates for price in closest_prices):
+            return True
+    return False
+
+
 def is_grounded(fact: ModelFact, obs: Observation) -> bool:
-    """A numeric fact is accepted only if the value is literally visible on the observed page."""
+    """A price is accepted only when its exact visible amount is associated with its named product."""
     text = obs.visible_text
-    return any(re.search(rf"(?<![\d,.]){re.escape(v)}(?![\d,])", text) for v in _price_variants(fact.value))
+    value_visible = any(re.search(rf"(?<![\d,.]){re.escape(v)}(?![\d,])", text) for v in _price_variants(fact.value))
+    if not value_visible:
+        return False
+    return fact.kind != "product_price" or _associated_price(fact, text)
 
 
 _SYMBOL_CODE = {"₹": "INR", "$": "USD", "€": "EUR", "£": "GBP"}
