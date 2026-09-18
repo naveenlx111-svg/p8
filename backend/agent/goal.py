@@ -19,8 +19,10 @@ _DESTINATIONS = [
     (re.compile(r"\bcart\b", re.I), "reach_cart", SuccessCriteria(url_contains=["cart"])),
     (re.compile(r"\b(sign ?up|register)\b", re.I), "reach_signup",
      SuccessCriteria(url_contains=["signup", "register"], visible_input_types=["email", "password"])),
+    # A login/sign-in goal is met by LEAVING the login form, not by merely reaching a page that has one:
+    # a password field being visible proves a login form is showing, never that the user is logged in.
     (re.compile(r"\b(log ?in|sign ?in)\b", re.I), "reach_login",
-     SuccessCriteria(url_contains=["login", "signin"], visible_input_types=["password"])),
+     SuccessCriteria(forbid_url_contains=["login", "signin"], forbid_visible_input_types=["password"])),
 ]
 
 
@@ -51,12 +53,17 @@ def compile_goal(raw: str, success_url: list[str] | None = None, success_text: l
                 best, objective, success = m.start(), obj, crit.model_copy(deep=True)
     if objective in ("reach_checkout", "reach_cart") and constraints.get("product"):
         success.cart_contains = constraints["product"]
+    if constraints.get("max_price") and constraints.get("product"):
+        success.max_price = constraints["max_price"]
+        success.price_entity = constraints["product"]
     if success_url or success_text:
         objective = objective if objective != "explore" else "custom"
         success.url_contains = list(success_url or [])
         success.visible_text_any = list(success_text or [])
         success.visible_input_types = []
         success.cart_contains = None  # the tester's explicit acceptance criteria replace the defaults
+        success.forbid_url_contains = []
+        success.forbid_visible_input_types = []
     if re.search(r"\b(add|put)\b.*\b(cart|basket|bag)\b", raw, re.I):
         success.forbid_text_any = ["cart is empty", "basket is empty", "bag is empty", "0 items in cart",
                                    "no items in your cart", "your cart is currently empty"]

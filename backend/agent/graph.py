@@ -48,6 +48,7 @@ class RunContext:
     verdict_missing: list[str] = field(default_factory=list)
     cart_product_seen: bool = False
     fail_reason: str | None = None
+    audited_rule_states: set[tuple[str, str]] = field(default_factory=set)
 
 
 class GraphState(TypedDict):
@@ -101,25 +102,32 @@ async def _audit(ctx: RunContext, final: bool) -> None:
         violations = await ctx.session.audit(final=final)
     except Exception as exc:  # axe failure must not kill the run; it is surfaced in the event stream
         ctx.bus.emit("axe_update", {"error": str(exc), "final": final})
+        s.accessibility_coverage = "failed" if s.accessibility_coverage == "not_run" else s.accessibility_coverage
         return
-    known = {v.id for v in s.axe_results}
-    new = [v for v in violations if v.id not in known]
+    state_id = ctx.obs.fingerprint
+    # Occurrences are tracked per (rule, semantic state): the same rule failing on two different screens
+    # (or inside a dialog) must retain both locations, not collapse into a single run-wide sighting.
+    new = [v for v in violations if (v.id, state_id) not in ctx.audited_rule_states]
+    for v in new:
+        ctx.audited_rule_states.add((v.id, state_id))
     s.axe_results.extend(new)
     s.accessibility_score = accessibility.risk_score(s.axe_results)
+    s.accessibility_coverage = "complete" if final else ("partial" if s.accessibility_coverage != "complete" else s.accessibility_coverage)
     ctx.bus.emit("axe_update", {
-        "final": final, "state_id": ctx.obs.fingerprint, "url": ctx.obs.route,
+        "final": final, "state_id": state_id, "url": ctx.obs.route,
         "violations": [v.model_dump() for v in violations], "new_rules": [v.id for v in new],
         "score": s.accessibility_score, "counts": accessibility.impact_counts(s.axe_results),
+        "coverage": s.accessibility_coverage,
     })
     for v in new:
         node = v.nodes[0] if v.nodes else None
         _add_finding(ctx, CriticFinding(
             category="accessibility", severity=IMPACT_TO_SEVERITY.get(v.impact or "minor", "low"),
             title=v.help, evidence=(node.failure_summary or v.description).replace("\n", " ")[:400] if node else v.description,
-            recommendation=v.help_url, step_number=s.step_count, state_id=ctx.obs.fingerprint,
+            recommendation=v.help_url, step_number=s.step_count, state_id=state_id,
             screenshot_id=ctx.obs.screenshot_id, source="axe", verified=True,
             data={"rule": v.id, "impact": v.impact, "html": node.html if node else None,
-                  "target": node.target if node else None, "affected_nodes": len(v.nodes)}))
+                  "target": node.target if node else None, "affected_nodes": v.total_nodes or len(v.nodes)}))
     if new:
         _emit_scores(ctx)
 
@@ -146,6 +154,10 @@ def build_graph(ctx: RunContext):
         ctx.bus.emit("journey_node", {**node.model_dump(), "active": True})
 
         ctx.notes = []
+        if obs.controls_truncated:
+            ctx.notes.append(f"Observation is incomplete: {len(obs.elements)} of {obs.total_interactive} interactive controls are shown. Scroll or use visible navigation to expand coverage.")
+        if obs.text_truncated:
+            ctx.notes.append("Visible page text was truncated; absence from this observation is not proof that text is absent from the page.")
         if ctx.pending:
             step = ctx.pending
             step.url_after, step.state_after = obs.url, obs.fingerprint
@@ -167,17 +179,20 @@ def build_graph(ctx: RunContext):
         ctx.bus.emit("observation", {
             "observation_id": obs.observation_id, "url": obs.url, "route": obs.route, "heading": obs.heading,
             "dialog_open": obs.dialog_open, "dialog_name": obs.dialog_name, "element_count": len(obs.elements),
+            "total_interactive": obs.total_interactive, "controls_truncated": obs.controls_truncated,
+            "text_truncated": obs.text_truncated,
             "state_id": obs.fingerprint, "image": obs.screenshot_id, "step": s.step_count,
             "elements": [e.describe() for e in obs.elements[:25]],
         })
 
-        if not obs.dialog_open:  # never audit through a transient overlay
-            await _audit(ctx, final=False)
+        await _audit(ctx, final=False)  # audit the state as observed, including an open dialog: it is user-facing too
 
         product = s.goal.success.cart_contains
-        if product and not obs.dialog_open and completion.cart_shows(obs, product):
-            ctx.cart_product_seen = True
-        verdict = completion.verify(s.goal, obs, ctx.cart_product_seen)
+        if product and not obs.dialog_open and "cart" in obs.route.lower():
+            # Reflects the MOST RECENT cart observation, not a historical "ever seen" flag: if the item
+            # is later removed and the cart is revisited, that must invalidate a prior sighting.
+            ctx.cart_product_seen = completion.cart_shows(obs, product)
+        verdict = completion.verify(s.goal, obs, s.journey_facts, ctx.cart_product_seen)
         if verdict.completed:
             s.goal_completed, s.goal_progress = True, 1.0
             ctx.bus.emit("observation", {"verification": {"completed": True, "evidence": verdict.evidence},
@@ -201,7 +216,7 @@ def build_graph(ctx: RunContext):
         if s.blocked_reason:
             ctx.fail_reason = s.blocked_reason
             return "finalize"
-        if s.recovery_attempts > s.max_recovery_attempts:
+        if s.consecutive_interruptions > s.max_recovery_attempts:
             ctx.fail_reason = "too many unrecovered interruptions"
             return "finalize"
         return "decide"
@@ -234,13 +249,16 @@ def build_graph(ctx: RunContext):
                 node.annotation = memory.money(f.value, f.currency)
                 ctx.bus.emit("journey_node", node.model_dump())
 
+        proposed = (ctx.session.registry.resolve(d.next_action.observation_id, d.next_action.element_id)
+                    if ctx.session.registry else None)
         ctx.bus.emit("decision", {
             "step": s.step_count + 1, "state_id": obs.fingerprint,
             "observed": d.page_summary, "goal_progress": s.goal_progress,
             "facts": [f.model_dump() for f in accepted],
             "facts_rejected": [f.model_dump() for f in rejected],
             "action": d.next_action.action.value, "label": d.next_action.display_label,
-            "text": d.next_action.text, "rationale": d.next_action.rationale,
+            "text": safety.masked_text(d.next_action.text, proposed[1] if proposed else None),
+            "rationale": d.next_action.rationale,
             "confidence": d.next_action.confidence, "latency_ms": result.latency_ms,
             "vision": result.used_vision, "attempts": result.attempts,
         })
@@ -276,10 +294,14 @@ def build_graph(ctx: RunContext):
         if action.action == ActionType.DONE:
             rejection = "Model reported DONE but deterministic verification failed: missing " + \
                         ", ".join(ctx.verdict_missing or ["success signals"])
-        elif action.action in (ActionType.CLICK, ActionType.TYPE) and element is None:
+        elif action.action in (ActionType.CLICK, ActionType.TYPE, ActionType.SELECT, ActionType.CHECK,
+                               ActionType.UNCHECK, ActionType.HOVER) and element is None:
             rejection = f"element {action.element_id} does not exist in observation {action.observation_id}"
+        elif element is not None and element.visibility == "offscreen":
+            rejection = (f'"{element.name or element.role}" is off-screen. Scroll until it is visible before '
+                         "interacting so the journey records the discovery step.")
         else:
-            rejection = safety.check(action, element, settings.allow_irreversible, s.goal.raw)
+            rejection = safety.check(action, element, settings.allow_irreversible, s.goal.raw, s.goal.forbidden_actions)
             if rejection:
                 s.friction.rejected_actions += 1
                 _add_finding(ctx, CriticFinding(category="safety", severity="info", title="Unsafe action blocked by safety gate",
@@ -287,7 +309,7 @@ def build_graph(ctx: RunContext):
                                                 screenshot_id=obs.screenshot_id, verified=True))
 
         ctx.bus.emit("action_started", {"step": s.step_count, "action": action.action.value,
-                                        "label": action.display_label, "text": action.text,
+                                        "label": action.display_label, "text": safety.masked_text(action.text, element),
                                         "target": step.target.model_dump() if step.target else None})
         if rejection:
             step.outcome, step.error = "rejected", rejection
@@ -295,6 +317,10 @@ def build_graph(ctx: RunContext):
         else:
             result = await ctx.session.execute(action)
             step.outcome, step.duration_ms, step.error = result.outcome, result.duration_ms, result.error
+            if safety.is_sensitive_target(element):
+                # Real text was already used to fill the field; from here on only the masked value is
+                # ever persisted (state.json, exported reports, action_completed event below).
+                action.text = safety.masked_text(action.text, element)
             if result.note:
                 s.last_outcome_note = result.note
         s.last_outcome = step.outcome
@@ -308,7 +334,7 @@ def build_graph(ctx: RunContext):
         return gs
 
     async def finalize(gs: GraphState) -> GraphState:
-        if ctx.obs and not ctx.obs.dialog_open:
+        if ctx.obs:
             await _audit(ctx, final=True)
         s.status = RunStatus.COMPLETED if s.goal_completed else RunStatus.FAILED
         s.run_error = s.run_error or (None if s.goal_completed else ctx.fail_reason)

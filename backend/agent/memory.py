@@ -17,9 +17,14 @@ def normalize_entity(name: str) -> str:
 
 
 def _price_variants(value: float) -> set[str]:
+    """Exact-value string forms the page could plausibly show. Never rounds: a proposed 29.99 must not be
+    grounded against a page that only shows 30 - that would accept a wrong price as if it were confirmed."""
+    is_whole = abs(value - round(value)) < 1e-9
+    if not is_whole:
+        return {f"{value:.2f}"}
     n = int(round(value))
     indian = _indian_grouping(n)
-    return {str(n), f"{n:,}", indian, f"{value:.2f}", f"{n:,}.00", f"{indian}.00"}
+    return {str(n), f"{n:,}", indian, f"{n:,}.00", f"{indian}.00"}
 
 
 def _indian_grouping(n: int) -> str:
@@ -98,6 +103,8 @@ def detect_price_conflicts(facts: list[PageFact], already_reported: set[str]) ->
                 continue
             if later.value == first.value or later.state_id == first.state_id:
                 continue
+            if later.currency != first.currency:
+                continue  # a currency change fully explains a numeric difference; not a suspected defect
             sig = f"{key}:{first.value}->{later.value}"
             if sig in already_reported:
                 continue

@@ -10,7 +10,7 @@ from enum import Enum
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 def utc_now() -> datetime:
@@ -41,6 +41,10 @@ class ActionType(str, Enum):
     BACK = "back"
     WAIT = "wait"
     PRESS = "press"
+    SELECT = "select"
+    CHECK = "check"
+    UNCHECK = "uncheck"
+    HOVER = "hover"
     DONE = "done"
 
 
@@ -63,6 +67,13 @@ class SuccessCriteria(BaseModel):
     cart_contains: str | None = None
     # Text that proves the goal is NOT met even if the URL looks right (e.g. "your cart is empty").
     forbid_text_any: list[str] = Field(default_factory=list)
+    # Route must NOT contain any of these once the goal is met (e.g. still on the login page).
+    forbid_url_contains: list[str] = Field(default_factory=list)
+    # These input types must NOT still be visible (e.g. a password field proves a login form is still showing).
+    forbid_visible_input_types: list[str] = Field(default_factory=list)
+    # The goal's price constraint, checked against grounded facts for price_entity (never against model opinion alone).
+    max_price: float | None = None
+    price_entity: str | None = None
 
 
 class GoalSpec(BaseModel):
@@ -88,6 +99,9 @@ class ObservedElement(BaseModel):
     disabled: bool = False
     in_dialog: bool = False
     covered: bool = False  # centre point is obscured by another element (e.g. an overlay)
+    visibility: Literal["visible", "offscreen"] = "visible"
+    checked: bool | None = None
+    selected: bool | None = None
     bbox: dict[str, float] | None = None
 
     def describe(self) -> str:
@@ -105,7 +119,18 @@ class ObservedElement(BaseModel):
             bits.append("(inside dialog)")
         if self.covered:
             bits.append("(covered by overlay)")
+        if self.visibility == "offscreen":
+            bits.append("(off-screen; scroll to discover)")
+        if self.checked is not None:
+            bits.append("checked" if self.checked else "not checked")
+        if self.selected is not None:
+            bits.append("selected" if self.selected else "not selected")
         return " ".join(bits)
+
+    def fingerprint_descriptor(self) -> str:
+        """Stable task-state data; values are already masked by the observer for passwords."""
+        return "|".join((self.role, self.name, self.input_type or "", self.value or "",
+                         str(self.checked), str(self.selected), self.visibility, str(self.covered)))
 
     def descriptor(self) -> "TargetDescriptor":
         return TargetDescriptor(role=self.role, name=self.name, input_type=self.input_type)
@@ -131,6 +156,9 @@ class Observation(BaseModel):
     dialog_name: str = ""
     screenshot_id: str | None = None
     fingerprint: str = ""
+    total_interactive: int = 0
+    controls_truncated: bool = False
+    text_truncated: bool = False
 
 
 # ---------------------------------------------------------------- actions / model output
@@ -146,6 +174,23 @@ class BrowserAction(BaseModel):
     key: Literal["Escape", "Enter", "Tab", "ArrowDown", "ArrowUp"] | None = None
     rationale: str = Field(default="", max_length=300)
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def require_action_fields(self) -> "BrowserAction":
+        """Reject incomplete actions instead of silently turning them into another action."""
+        targeted = {ActionType.CLICK, ActionType.TYPE, ActionType.SELECT, ActionType.CHECK,
+                    ActionType.UNCHECK, ActionType.HOVER}
+        if self.action in targeted and self.element_id is None:
+            raise ValueError(f"{self.action.value} requires element_id")
+        if self.action in (ActionType.TYPE, ActionType.SELECT) and self.text is None:
+            raise ValueError(f"{self.action.value} requires text")
+        if self.action == ActionType.SCROLL and self.direction is None:
+            raise ValueError("scroll requires direction")
+        if self.action == ActionType.PRESS and self.key is None:
+            raise ValueError("press requires key")
+        if self.submit and self.action != ActionType.TYPE:
+            raise ValueError("submit is only valid for type")
+        return self
 
 
 class ModelFact(BaseModel):
@@ -204,6 +249,7 @@ class AxeViolation(BaseModel):
     help: str
     help_url: str | None = None
     nodes: list[AxeNode] = Field(default_factory=list)
+    total_nodes: int = 0  # true affected-element count; `nodes` is capped to a few examples
 
 
 class CriticFinding(BaseModel):
@@ -315,11 +361,13 @@ class AgentState(BaseModel):
     last_progress_step: int = 0
     best_progress: float = 0.0
     recovery_attempts: int = 0
+    consecutive_interruptions: int = 0  # unrecovered interruptions in a row; reset on each successful recovery
     max_recovery_attempts: int = 2
     in_recovery: bool = False
     attempt_failures: dict[str, int] = Field(default_factory=dict)
     blocked_reason: str | None = None
     accessibility_score: int = Field(default=100, ge=0, le=100)
+    accessibility_coverage: Literal["not_run", "partial", "complete", "failed"] = "not_run"
     current_page_summary: str = ""
     current_state_id: str | None = None
     friction: FrictionMetrics = Field(default_factory=FrictionMetrics)

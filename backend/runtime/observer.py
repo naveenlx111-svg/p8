@@ -79,6 +79,7 @@ COLLECT_JS = r"""
     return !!top && top !== el && !el.contains(top) && !top.contains(el);
   };
   const all = [...document.querySelectorAll(SEL)].filter(isVisible);
+  const totalInteractive = all.length;
   // Rank what a user is confronted with: open dialog first, then controls on screen (reading order),
   // then off-screen controls by distance from the viewport. Large pages (e.g. marketplaces) have hundreds.
   const dist = (el) => {
@@ -119,6 +120,9 @@ COLLECT_JS = r"""
       disabled: !!el.disabled || el.getAttribute('aria-disabled') === 'true',
       in_dialog: !!(dialogs.find(d => d.contains(el))),
       covered: covered(el),
+      visibility: dist(el) === 0 ? 'visible' : 'offscreen',
+      checked: (el.type === 'checkbox' || el.type === 'radio' || el.getAttribute('role') === 'switch') ? !!el.checked : null,
+      selected: el.tagName === 'SELECT' ? el.selectedIndex >= 0 : null,
       bbox: { x: r.x, y: r.y, width: r.width, height: r.height },
     });
   }
@@ -147,6 +151,9 @@ COLLECT_JS = r"""
     dialog_open: dialogs.length > 0,
     dialog_name: dialog ? (dialog.getAttribute('aria-label') || byIds(dialog.getAttribute('aria-labelledby') || '') || txt(dialog.innerText).slice(0, 80)) : '',
     dialog_text: dialog ? txt(dialog.innerText).slice(0, 400) : '',
+    total_interactive: totalInteractive,
+    controls_truncated: ordered.length > els.length,
+    text_truncated: pageText.length > 2400,
   };
 }
 """
@@ -182,7 +189,8 @@ async def observe(page: Page, max_elements: int = 40, focus_words: list[str] | N
         els_prop = await handle.get_property("els")
         props = await els_prop.get_properties()
         meta = {}
-        for key in ("heading", "title", "visible_text", "dialog_open", "dialog_name", "dialog_text"):
+        for key in ("heading", "title", "visible_text", "dialog_open", "dialog_name", "dialog_text",
+                    "total_interactive", "controls_truncated", "text_truncated"):
             meta[key] = await (await handle.get_property(key)).json_value()
     finally:
         await handle.dispose()
@@ -198,12 +206,13 @@ async def observe(page: Page, max_elements: int = 40, focus_words: list[str] | N
             element_id=idx, role=info["role"], name=name, tag=info["tag"], input_type=info["input_type"],
             placeholder=info["placeholder"], value=info["value"], disabled=info["disabled"],
             in_dialog=info["in_dialog"], covered=info["covered"], bbox=info["bbox"],
+            visibility=info["visibility"], checked=info["checked"], selected=info["selected"],
         )
         registry.handles[idx] = el_handle
         registry.elements[idx] = el
         elements.append(el)
 
-    controls = [f"{e.role}:{e.name}" for e in elements if not e.covered]
+    controls = [e.fingerprint_descriptor() for e in elements if not e.covered]
     visible_text = meta["visible_text"]
     if meta["dialog_open"]:
         visible_text = f"[DIALOG] {meta['dialog_text']}\n{visible_text}"
@@ -211,6 +220,8 @@ async def observe(page: Page, max_elements: int = 40, focus_words: list[str] | N
         observation_id=obs_id, url=page.url, route=canonical_route(page.url), title=meta["title"],
         heading=meta["heading"], visible_text=visible_text, aria_snapshot=await aria_snapshot(page),
         elements=elements, dialog_open=meta["dialog_open"], dialog_name=meta["dialog_name"],
+        total_interactive=meta["total_interactive"], controls_truncated=meta["controls_truncated"],
+        text_truncated=meta["text_truncated"],
     )
     obs.fingerprint = state_fingerprint(obs.url, obs.heading, obs.dialog_name, controls, meta["visible_text"])
     return obs, registry

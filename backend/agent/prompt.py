@@ -16,6 +16,8 @@ Action space (field "action"):
 - "scroll": needs direction "up" or "down"
 - "back": browser back
 - "press": needs key "Escape" | "Enter" | "Tab" | "ArrowDown" | "ArrowUp" (e.g. Escape closes popups and suggestion lists)
+- "select": needs a native select element_id and its visible option text in "text"
+- "check" / "uncheck" / "hover": each needs element_id
 - "wait": wait briefly for the page to settle
 - "done": ONLY when the screen already shows the goal is achieved
 
@@ -27,6 +29,8 @@ Rules:
   If the exact product is not visible, use the site's search box with the product name.
 - Controls marked "(covered by overlay)" cannot be used until the overlay/dialog is dismissed. If a dialog blocks
   your goal, dismiss it using a neutral control such as "Close", "No thanks" or "Maybe later".
+- Controls marked "(off-screen; scroll to discover)" have not been seen in the current viewport. Scroll deliberately
+  before using one, so the journey records that discovery cost.
 - Never pay, place orders, subscribe/join memberships, delete data or send messages. Never enter card numbers or passwords.
 - Do not repeat an action that already failed or made no progress; try something different.
 - Stop at the goal's destination. Only fill in forms when the goal requires it, using values given in the goal.
@@ -85,6 +89,7 @@ OBSERVATION_ID: {obs.observation_id}
 URL: {obs.url}
 PAGE HEADING: {obs.heading or '(none)'}
 {dialog}
+OBSERVATION COVERAGE: {len(obs.elements)} of {obs.total_interactive} controls shown; controls truncated={obs.controls_truncated}; text truncated={obs.text_truncated}
 
 INTERACTIVE CONTROLS:
 {controls}
