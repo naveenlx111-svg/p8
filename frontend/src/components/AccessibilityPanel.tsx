@@ -10,7 +10,8 @@ export function AccessibilityPanel({ state }: { state: RunState }) {
   const counts = sc?.accessibility_counts ?? { critical: 0, serious: 0, moderate: 0, minor: 0 }
   const color = score >= 90 ? 'score-good' : score >= 70 ? 'score-warning' : 'score-poor'
   const fr = sc?.friction
-  const report = state.summary?.report_url
+  const backend = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '')
+  const report = state.summary?.report_url ? `${backend}${state.summary.report_url}` : null
 
   return (
     <section className="workspace-panel accessibility-panel flex min-h-0 flex-col rounded-xl border border-slate-200 bg-white">

@@ -17,6 +17,7 @@ async ({rules, tags}) => {
   const result = await axe.run(document, {runOnly, resultTypes: ['violations']});
   return {violations: result.violations.map(v => ({
     id: v.id, impact: v.impact, description: v.description, help: v.help, help_url: v.helpUrl,
+    total_nodes: v.nodes.length,
     nodes: v.nodes.slice(0, 3).map(n => ({html: n.html, target: n.target, failure_summary: n.failureSummary}))
   }))};
 }

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -32,6 +33,21 @@ app.mount("/replay_runs", StaticFiles(directory=settings.replay_dir), name="repl
 
 BUSES: dict[str, EventBus] = {}
 TASKS: set[asyncio.Task] = set()
+
+_SAFE_NAME = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def _replay_path(name: str) -> Path:
+    """Confines a caller-supplied replay name to a single path segment directly under replay_dir.
+    Rejects anything that could traverse or escape it (absolute paths, "..", separators) before any
+    filesystem read/write/delete touches it."""
+    if not _SAFE_NAME.match(name):
+        raise HTTPException(400, "replay name must match ^[A-Za-z0-9_-]{1,64}$")
+    base = settings.replay_dir.resolve()
+    target = (base / name).resolve()
+    if target.parent != base:
+        raise HTTPException(400, "invalid replay name")
+    return target
 
 
 class RunRequest(BaseModel):
@@ -71,7 +87,7 @@ async def _replay(bus: EventBus, name: str, speed: float) -> None:
 @app.post("/api/runs")
 async def create_run(req: RunRequest) -> dict:
     if req.mode == "replay":
-        if not (settings.replay_dir / req.replay / "events.jsonl").exists():
+        if not (_replay_path(req.replay) / "events.jsonl").exists():
             raise HTTPException(404, f"replay '{req.replay}' not found")
         run_id = "replay_" + short_id()
         bus = EventBus(run_id, settings.artifacts_dir, record=False)
@@ -133,7 +149,7 @@ def save_replay(run_id: str, name: str = "golden") -> dict:
     src = _run_dir(run_id)
     if not (src / "state.json").exists():
         raise HTTPException(409, "run has not finished")
-    dst = settings.replay_dir / name
+    dst = _replay_path(name)
     if dst.exists():
         shutil.rmtree(dst)
     shutil.copytree(src, dst)
@@ -147,7 +163,7 @@ def list_replays() -> list[str]:
 
 @app.get("/api/replays/{name}/report", response_class=HTMLResponse)
 def replay_report(name: str):
-    path = settings.replay_dir / name / "report.html"
+    path = _replay_path(name) / "report.html"
     if not path.exists():
         raise HTTPException(404, "replay report not found")
     return HTMLResponse(path.read_text(encoding="utf-8"))

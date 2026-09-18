@@ -163,9 +163,12 @@ def extract_json(text: str) -> dict:
     if text.startswith("```"):
         text = re.sub(r"^```(json)?|```$", "", text, flags=re.M).strip()
     try:
-        return json.loads(text)
+        data = json.loads(text)
     except json.JSONDecodeError:
         m = _JSON_BLOCK.search(text)
         if not m:
             raise
-        return json.loads(m.group(0))
+        data = json.loads(m.group(0))
+    if not isinstance(data, dict):
+        raise ValueError("model output must be a JSON object")
+    return data

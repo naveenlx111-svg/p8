@@ -12,7 +12,6 @@ from dataclasses import dataclass
 
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Page
-from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from backend.runtime.observer import ElementRegistry
 from backend.schemas import ActionType, BrowserAction, Outcome, TargetDescriptor
@@ -26,6 +25,7 @@ class ActionResult:
     duration_ms: int
     target: TargetDescriptor | None = None
     error: str | None = None
+    note: str | None = None
 
 
 async def settle(page: Page) -> None:
@@ -56,7 +56,10 @@ def _classify(exc: Exception) -> Outcome:
     msg = str(exc).lower()
     if "detached" in msg or "not attached" in msg or "has been disposed" in msg or "context was destroyed" in msg:
         return "stale"
-    if isinstance(exc, PlaywrightTimeoutError) or "intercepts pointer events" in msg or "not visible" in msg:
+    # "blocked" implies occlusion/obstruction evidence; a bare timeout with no such evidence has an
+    # unknown cause (could be a disconnected handler, slow network, anything) and must not be presented
+    # as if something were proven to be covering the control.
+    if "intercepts pointer events" in msg or "element is not visible" in msg:
         return "blocked"
     return "failed"
 
@@ -68,7 +71,8 @@ async def execute(page: Page, registry: ElementRegistry, action: BrowserAction, 
     def done(outcome: Outcome, error: str | None = None) -> ActionResult:
         return ActionResult(outcome, int((time.perf_counter() - start) * 1000), target, error)
 
-    needs_element = action.action in (ActionType.CLICK, ActionType.TYPE)
+    needs_element = action.action in (ActionType.CLICK, ActionType.TYPE, ActionType.SELECT,
+                                      ActionType.CHECK, ActionType.UNCHECK, ActionType.HOVER)
     if needs_element:
         resolved = registry.resolve(action.observation_id, action.element_id)
         if resolved is None:
@@ -82,17 +86,25 @@ async def execute(page: Page, registry: ElementRegistry, action: BrowserAction, 
         if action.action == ActionType.CLICK:
             await handle.click(timeout=timeout_ms)
         elif action.action == ActionType.TYPE:
-            await handle.fill(action.text or "", timeout=timeout_ms)
-            # A person submits a search box with Enter; small models often forget to ask for it.
-            is_search = element.role == "searchbox" or "search" in (element.name or element.placeholder or "").lower()
-            if action.submit or is_search:
+            await handle.fill(action.text, timeout=timeout_ms)
+            if action.submit:
                 await handle.press("Enter", timeout=timeout_ms)
+        elif action.action == ActionType.SELECT:
+            if element.tag != "select":
+                return done("failed", f'"{element.name}" is not a native select control')
+            await handle.select_option(label=action.text, timeout=timeout_ms)
+        elif action.action == ActionType.CHECK:
+            await handle.check(timeout=timeout_ms)
+        elif action.action == ActionType.UNCHECK:
+            await handle.uncheck(timeout=timeout_ms)
+        elif action.action == ActionType.HOVER:
+            await handle.hover(timeout=timeout_ms)
         elif action.action == ActionType.SCROLL:
             await page.mouse.wheel(0, -600 if action.direction == "up" else 600)
         elif action.action == ActionType.BACK:
             await page.go_back(timeout=timeout_ms)
         elif action.action == ActionType.PRESS:
-            await page.keyboard.press(action.key or "Escape")
+            await page.keyboard.press(action.key)
         elif action.action == ActionType.WAIT:
             await page.wait_for_timeout(800)
         await settle(page)

@@ -47,7 +47,11 @@ def normalize_text(text: str) -> str:
 
 
 def state_fingerprint(url: str, heading: str, dialog_name: str, controls: list[str], visible_text: str) -> str:
+    # Include origin so identical routes on separate target sites cannot merge into one journey state.
+    parts = urlsplit(url)
+    origin = f"{parts.scheme}://{parts.netloc}".lower()
     material = "\n".join([
+        origin,
         canonical_route(url),
         normalize_text(heading),
         "dialog:" + normalize_text(dialog_name),

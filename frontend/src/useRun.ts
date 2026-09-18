@@ -105,8 +105,10 @@ export function useRun() {
   doneRef.current = state.status === 'completed' || state.status === 'failed'
 
   const connect = useCallback((runId: string, attempt = 0) => {
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    const ws = new WebSocket(`${proto}://${location.host}/ws/runs/${runId}?after=${seqRef.current}`)
+    const defaultProto = location.protocol === 'https:' ? 'wss' : 'ws'
+    const backend = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '')
+    const wsBase = import.meta.env.VITE_WS_URL || (backend ? backend.replace(/^http/, 'ws') : `${defaultProto}://${location.host}`)
+    const ws = new WebSocket(`${wsBase}/ws/runs/${runId}?after=${seqRef.current}`)
     wsRef.current = ws
     ws.onmessage = m => dispatch({ type: 'event', ev: JSON.parse(m.data) })
     ws.onclose = () => {
@@ -120,7 +122,8 @@ export function useRun() {
   const start = useCallback(async (body: Record<string, unknown>) => {
     wsRef.current?.close()
     wsRef.current = null
-    const r = await fetch('/api/runs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+    const backend = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '')
+    const r = await fetch(`${backend}/api/runs`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
     if (!r.ok) throw new Error(await r.text())
     const { run_id } = await r.json()
     seqRef.current = 0
@@ -131,3 +134,4 @@ export function useRun() {
 
   return { state, start }
 }
+

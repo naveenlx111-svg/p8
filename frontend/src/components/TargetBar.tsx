@@ -3,6 +3,7 @@ export interface Target {
   url: string
   successUrl: string
   successText: string
+  maxSteps?: string
 }
 
 // Examples only fill the form; the agent still receives nothing but the URL and the goal text.
@@ -18,6 +19,10 @@ export const PRESETS: { name: string; t: Target }[] = [
   {
     name: 'SauceDemo · problem user (real bugs)',
     t: { goal: 'Log in with username problem_user and password secret_sauce, add the Sauce Labs Backpack to the cart, go to checkout, enter first name Asha, last name Rao and postal code 560001, and reach the checkout overview.', url: 'https://www.saucedemo.com/', successUrl: 'checkout-step-two', successText: '' },
+  },
+  {
+    name: 'Amazon.in (live site, long journey)',
+    t: { goal: 'Search for a boAt wired earphone under ₹1,000, open its product page, add it to the cart, and open the cart.', url: 'https://www.amazon.in/', successUrl: 'cart', successText: 'Subtotal' },
   },
   {
     name: 'Demoblaze store',
@@ -48,6 +53,10 @@ export function TargetBar({ target, setTarget, disabled }: Props) {
       <label className="flex items-center gap-1.5 font-semibold">
         and page shows
         <input aria-label="Success text" value={target.successText} onChange={set('successText')} disabled={disabled} placeholder="auto" className={`${input} w-40`} />
+      </label>
+      <label className="flex items-center gap-1.5 font-semibold" title="Safety ceiling. Runs normally stop on verified success or when the agent stalls.">
+        Max steps
+        <input aria-label="Max steps" value={target.maxSteps ?? ''} onChange={set('maxSteps')} disabled={disabled} placeholder="100" inputMode="numeric" className={`${input} w-16`} />
       </label>
       <select aria-label="Example targets" disabled={disabled} value="" onChange={e => {
         const preset = PRESETS[Number(e.target.value)]

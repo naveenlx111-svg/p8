@@ -6,6 +6,7 @@ from html import escape
 from pathlib import Path
 
 from backend.agent.graph import summarize
+from backend.agent.memory import money
 from backend.runtime.accessibility import DISCLAIMER
 from backend.schemas import AgentState
 
@@ -56,10 +57,11 @@ def render_report(state: AgentState, run_dir: Path) -> str:
             if f.category == "semantic_inconsistency":
                 d = f.data
                 bn, an = nodes.get(d.get("before_state")), nodes.get(d.get("after_state"))
+                currency = str(d.get("currency", "INR"))
                 extra = (f"<div class='pair'><figure>{_img(run_dir, bn.screenshot_id if bn else None, 300)}"
-                         f"<figcaption>{escape(d.get('before_context', ''))}: ₹{d.get('before', 0):,.0f}</figcaption></figure>"
+                         f"<figcaption>{escape(d.get('before_context', ''))}: {escape(money(d.get('before', 0), currency))}</figcaption></figure>"
                          f"<figure>{_img(run_dir, an.screenshot_id if an else None, 300)}"
-                         f"<figcaption>{escape(d.get('after_context', ''))}: ₹{d.get('after', 0):,.0f}</figcaption></figure></div>")
+                         f"<figcaption>{escape(d.get('after_context', ''))}: {escape(money(d.get('after', 0), currency))}</figcaption></figure></div>")
                 shot = None
             if f.category == "accessibility" and f.data.get("html"):
                 extra = f"<pre>{escape(f.data['html'])}</pre>"
@@ -107,6 +109,7 @@ Model {escape(state.provider)}/{escape(state.model)}{' (OFFLINE TEST DOUBLE, not
 <div class="kpi"><b>{state.accessibility_score}/100</b>automated accessibility risk score</div>
 </div>
 <p class="meta">{escape(DISCLAIMER)}</p>
+<p class="meta">Accessibility coverage: {escape(state.accessibility_coverage)}. The score covers only successfully audited states; partial or failed coverage is not a clean audit.</p>
 <p>{state.step_count} actions in {s['runtime_s']}s · {s['model_calls']} model calls (p50 {s['model_latency_p50_ms']} ms) ·
 friction events: {fr.interruptions} interruption, {fr.blocked_interactions} blocked, {fr.failed_interactions} failed,
 {fr.repeated_states} repeated state, {fr.backtracks} backtracks, {fr.no_progress_actions} no-progress actions
