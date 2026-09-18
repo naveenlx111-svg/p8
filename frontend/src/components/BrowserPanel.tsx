@@ -7,7 +7,8 @@ interface Props {
 }
 
 export function BrowserPanel({ state, inspect, clearInspect }: Props) {
-  const base = state.started?.artifact_base ?? ''
+  const backend = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '')
+  const base = state.started?.artifact_base ? `${backend}${state.started.artifact_base}` : ''
   const node = inspect ? state.nodes[inspect] : null
   const image = node?.screenshot_id ?? state.frame?.image
   const url = node?.url ?? state.frame?.url
