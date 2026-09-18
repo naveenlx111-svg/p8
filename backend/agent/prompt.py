@@ -15,6 +15,7 @@ Action space (field "action"):
 - "type": needs element_id and text; set "submit": true to press Enter afterwards (e.g. search boxes)
 - "scroll": needs direction "up" or "down"
 - "back": browser back
+- "press": needs key "Escape" | "Enter" | "Tab" | "ArrowDown" | "ArrowUp" (e.g. Escape closes popups and suggestion lists)
 - "wait": wait briefly for the page to settle
 - "done": ONLY when the screen already shows the goal is achieved
 
@@ -46,12 +47,12 @@ Respond with ONE JSON object and nothing else:
   "facts": [{"kind": "product_price", "entity": "...", "value": 0, "currency": "<ISO code>", "context": "..."}],
   "findings": [{"category": "friction|occlusion|ambiguity|dead_end|semantic_inconsistency", "severity": "low|medium|high", "title": "...", "evidence": "..."}],
   "next_action": {"observation_id": "...", "action": "click", "element_id": 0, "display_label": "<label of the control>",
-                  "text": null, "submit": false, "direction": null,
+                  "text": null, "submit": false, "direction": null, "key": null,
                   "rationale": "<= 20 words, user-facing, no hidden reasoning", "confidence": 0.0-1.0}
 }"""
 
 
-def _history(state: AgentState, limit: int = 6) -> str:
+def _history(state: AgentState, limit: int = 8) -> str:
     if not state.execution_history:
         return "(no actions yet)"
     lines = []
@@ -61,6 +62,13 @@ def _history(state: AgentState, limit: int = 6) -> str:
         moved = "same screen" if s.state_before == s.state_after else f"-> {s.url_after or '?'}"
         lines.append(f"step {s.step_number}: {what} => {s.outcome.upper()} ({moved}){' - ' + s.error if s.error else ''}")
     return "\n".join(lines)
+
+
+def _visited(state: AgentState) -> str:
+    nodes = state.journey_graph_nodes[-12:]
+    if not nodes:
+        return "(none)"
+    return "\n".join(f"- {n.label} ({n.route}){' x' + str(n.visits) if n.visits > 1 else ''}" for n in nodes)
 
 
 def build_user_prompt(state: AgentState, obs: Observation, notes: list[str]) -> str:
@@ -89,6 +97,9 @@ ACCESSIBILITY SNAPSHOT (truncated):
 
 RECENT ACTIONS:
 {_history(state)}
+
+SCREENS VISITED SO FAR (avoid going in circles):
+{_visited(state)}
 
 SYSTEM NOTES (deterministic observations from the test harness):
 {note_block}

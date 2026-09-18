@@ -11,10 +11,12 @@ from backend.schemas import AgentState, GoalSpec, RunStatus, short_id
 
 
 def new_state(goal: str | GoalSpec, target_url: str | None = None, run_id: str | None = None,
-              success_url: list[str] | None = None, success_text: list[str] | None = None) -> AgentState:
+              success_url: list[str] | None = None, success_text: list[str] | None = None,
+              max_steps: int | None = None) -> AgentState:
     spec = goal if isinstance(goal, GoalSpec) else compile_goal(goal, success_url, success_text)
     return AgentState(run_id=run_id or short_id(), goal=spec, target_url=target_url or settings.target_url,
-                      provider=settings.provider, model=model_name(), max_steps=settings.max_steps,
+                      provider=settings.provider, model=model_name(), max_steps=max(1, min(max_steps or settings.max_steps, 100)),
+                      stall_limit=settings.stall_limit,
                       max_recovery_attempts=settings.max_recoveries)
 
 

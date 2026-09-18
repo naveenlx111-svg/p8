@@ -52,9 +52,8 @@ async def main() -> None:
     args = ap.parse_args()
     results = []
     for i in range(args.runs):
-        if args.max_steps:
-            settings.max_steps = args.max_steps
-        state = new_state(args.goal, args.url, success_url=args.success_url, success_text=args.success_text)
+        state = new_state(args.goal, args.url, success_url=args.success_url, success_text=args.success_text,
+                          max_steps=args.max_steps)
         bus = EventBus(state.run_id, settings.artifacts_dir / f"run_{state.run_id}")
         q = bus.subscribe()
 

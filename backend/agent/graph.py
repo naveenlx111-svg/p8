@@ -140,6 +140,8 @@ def build_graph(ctx: RunContext):
         node, is_new = journey.upsert_node(s, obs)
         if not is_new and came_from and came_from != node.id:
             s.friction.repeated_states += 1
+        if is_new:
+            s.last_progress_step = s.step_count  # a screen we have never seen = exploration progress
         s.current_state_id = node.id
         ctx.bus.emit("journey_node", {**node.model_dump(), "active": True})
 
@@ -190,6 +192,9 @@ def build_graph(ctx: RunContext):
     def route(gs: GraphState) -> str:
         if s.goal_completed:
             return "finalize"
+        if s.step_count - s.last_progress_step >= s.stall_limit:
+            ctx.fail_reason = (f"stalled: {s.stall_limit} actions without reaching a new screen or advancing the goal")
+            return "finalize"
         if s.step_count >= s.max_steps:
             ctx.fail_reason = f"action budget of {s.max_steps} exhausted before the goal was verified"
             return "finalize"
@@ -216,6 +221,9 @@ def build_graph(ctx: RunContext):
         ctx.decision = d
         s.current_page_summary = d.page_summary
         s.goal_progress = max(0.0, min(0.99, d.goal_progress))
+        if s.goal_progress > s.best_progress + 0.04:
+            s.best_progress = s.goal_progress
+            s.last_progress_step = s.step_count
 
         accepted, rejected = memory.absorb_facts(s.journey_facts, d.facts, obs, s.step_count + 1, obs.fingerprint)
         node = journey.get_node(s, obs.fingerprint)

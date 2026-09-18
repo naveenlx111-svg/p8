@@ -33,13 +33,15 @@ def analyse_transition(state: AgentState, prev: Observation, obs: Observation, s
 
     if step.outcome == "blocked":
         m.blocked_interactions += 1
-        rep.notes.append(f'"{label}" could not be activated ({step.error}). Something may be covering it.')
+        rep.notes.append(f'"{label}" could not be activated ({step.error}). Something is covering or blocking it: '
+                         'close popups/suggestion lists (press Escape) or use a different control. Do not retry it as-is.')
         rep.findings.append(CriticFinding(
             category="occlusion" if obs.dialog_open else "friction", severity="medium",
             title=f'Interaction blocked: "{label}"',
             evidence=f"The control was visible but could not be activated: {step.error}",
             recommendation="Make sure primary controls are not covered or disabled without explanation.",
             step_number=step.step_number, state_id=obs.fingerprint, screenshot_id=obs.screenshot_id, verified=True))
+        _count_failure(state, rep, step, label, obs)
         return rep
 
     if step.outcome in ("failed", "stale"):

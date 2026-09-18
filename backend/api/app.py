@@ -42,6 +42,7 @@ class RunRequest(BaseModel):
     speed: float = 1.0
     success_url: list[str] | None = None
     success_text: list[str] | None = None
+    max_steps: int | None = None
 
 
 def _spawn(coro) -> None:
@@ -81,7 +82,8 @@ async def create_run(req: RunRequest) -> dict:
         raise HTTPException(400, "target_url must start with http:// or https://")
     if not req.goal.strip():
         raise HTTPException(400, "goal must not be empty")
-    state = new_state(req.goal, req.target_url, success_url=req.success_url, success_text=req.success_text)
+    state = new_state(req.goal, req.target_url, success_url=req.success_url, success_text=req.success_text,
+                      max_steps=req.max_steps)
     bus = EventBus(state.run_id, settings.artifacts_dir / f"run_{state.run_id}")
     BUSES[state.run_id] = bus
     _spawn(run_live(state, bus))

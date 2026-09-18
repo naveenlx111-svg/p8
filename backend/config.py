@@ -29,10 +29,11 @@ class Settings(BaseSettings):
     viewport_width: int = 1280
     viewport_height: int = 800
 
-    max_steps: int = 12
+    max_steps: int = 40  # hard safety cap; runs normally end on success or on stall detection
+    stall_limit: int = 8  # stop after this many actions with no new screen and no goal progress
     max_recoveries: int = 2
     action_timeout_ms: int = 2500
-    max_elements: int = 40
+    max_elements: int = 60
     allow_irreversible: bool = False
 
     artifacts_dir: Path = ROOT / "artifacts"

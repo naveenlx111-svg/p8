@@ -44,6 +44,14 @@ async def settle(page: Page) -> None:
         pass
 
 
+def _describe_error(exc: Exception) -> str:
+    lines = [l.strip() for l in str(exc).splitlines() if l.strip()]
+    head = lines[0] if lines else type(exc).__name__
+    # Playwright's call log names the element that swallowed the click: valuable UX evidence.
+    blocker = next((l for l in lines if "intercepts pointer events" in l), None)
+    return (head + (" | " + blocker.lstrip("- ") if blocker else ""))[:400]
+
+
 def _classify(exc: Exception) -> Outcome:
     msg = str(exc).lower()
     if "detached" in msg or "not attached" in msg or "has been disposed" in msg or "context was destroyed" in msg:
@@ -75,15 +83,19 @@ async def execute(page: Page, registry: ElementRegistry, action: BrowserAction, 
             await handle.click(timeout=timeout_ms)
         elif action.action == ActionType.TYPE:
             await handle.fill(action.text or "", timeout=timeout_ms)
-            if action.submit:
+            # A person submits a search box with Enter; small models often forget to ask for it.
+            is_search = element.role == "searchbox" or "search" in (element.name or element.placeholder or "").lower()
+            if action.submit or is_search:
                 await handle.press("Enter", timeout=timeout_ms)
         elif action.action == ActionType.SCROLL:
             await page.mouse.wheel(0, -600 if action.direction == "up" else 600)
         elif action.action == ActionType.BACK:
             await page.go_back(timeout=timeout_ms)
+        elif action.action == ActionType.PRESS:
+            await page.keyboard.press(action.key or "Escape")
         elif action.action == ActionType.WAIT:
             await page.wait_for_timeout(800)
         await settle(page)
         return done("success")
     except Exception as exc:  # classified, never swallowed: the outcome + message become evidence
-        return done(_classify(exc), str(exc).splitlines()[0][:300])
+        return done(_classify(exc), _describe_error(exc))

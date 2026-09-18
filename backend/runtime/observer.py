@@ -67,11 +67,24 @@ COLLECT_JS = r"""
     return !!top && top !== el && !el.contains(top) && !top.contains(el);
   };
   const all = [...document.querySelectorAll(SEL)].filter(isVisible);
-  // Controls inside an open dialog come first: that is what the user is confronted with.
-  const ordered = modal ? [...all.filter(e => modal.contains(e)), ...all.filter(e => !modal.contains(e))] : all;
+  // Rank what a user is confronted with: open dialog first, then controls on screen (reading order),
+  // then off-screen controls by distance from the viewport. Large pages (e.g. marketplaces) have hundreds.
+  const dist = (el) => {
+    const r = el.getBoundingClientRect();
+    if (r.bottom >= 0 && r.top <= innerHeight) return 0;
+    return r.top > innerHeight ? r.top - innerHeight : -r.bottom;
+  };
+  const rank = (el) => (modal && modal.contains(el)) ? -1 : (dist(el) === 0 ? 0 : 1);
+  const ordered = all.map((el, i) => ({el, i, k: rank(el), d: dist(el)}))
+    .sort((a, b) => a.k - b.k || (a.k === 1 ? a.d - b.d : a.i - b.i)).map(o => o.el);
+  const seen = new Set();
   const els = [], info = [];
   for (const el of ordered) {
     if (els.length >= maxElements) break;
+    // The same destination is often linked twice (image + title); keep the first, it costs the model nothing.
+    const href = el.tagName === 'A' ? el.getAttribute('href') : null;
+    const dupKey = href ? roleOf(el) + '|' + accName(el) + '|' + href : null;
+    if (dupKey) { if (seen.has(dupKey)) continue; seen.add(dupKey); }
     const r = el.getBoundingClientRect();
     els.push(el);
     info.push({

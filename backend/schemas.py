@@ -40,6 +40,7 @@ class ActionType(str, Enum):
     SCROLL = "scroll"
     BACK = "back"
     WAIT = "wait"
+    PRESS = "press"
     DONE = "done"
 
 
@@ -140,6 +141,7 @@ class BrowserAction(BaseModel):
     text: str | None = None
     submit: bool = False  # for TYPE: press Enter afterwards
     direction: Literal["up", "down"] | None = None
+    key: Literal["Escape", "Enter", "Tab", "ArrowDown", "ArrowUp"] | None = None
     rationale: str = Field(default="", max_length=300)
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
 
@@ -306,7 +308,10 @@ class AgentState(BaseModel):
     last_outcome_note: str = ""
     goal_progress: float = Field(default=0.0, ge=0.0, le=1.0)
     goal_completed: bool = False
-    max_steps: int = 12
+    max_steps: int = 40
+    stall_limit: int = 8
+    last_progress_step: int = 0
+    best_progress: float = 0.0
     recovery_attempts: int = 0
     max_recovery_attempts: int = 2
     in_recovery: bool = False
