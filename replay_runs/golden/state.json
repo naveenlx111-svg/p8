@@ -1,0 +1,606 @@
+{
+ "run_id": "407815de44",
+ "goal": {
+  "raw": "Find the Nova headphones under \u20b93,000, add them to cart, and reach checkout.",
+  "objective": "reach_checkout",
+  "constraints": {
+   "max_price": 3000.0,
+   "product": "Nova headphones"
+  },
+  "success": {
+   "url_contains": [
+    "checkout"
+   ],
+   "visible_input_types": [
+    "email",
+    "text"
+   ],
+   "visible_text_any": [],
+   "cart_contains": "Nova headphones"
+  },
+  "forbidden_actions": [
+   "complete payment",
+   "place order",
+   "delete data",
+   "close account",
+   "send message"
+  ]
+ },
+ "target_url": "http://127.0.0.1:4173/",
+ "provider": "ollama",
+ "model": "qwen2.5:7b",
+ "current_url": "http://127.0.0.1:4173/#/checkout",
+ "step_count": 6,
+ "execution_history": [
+  {
+   "step_id": "cda96b2fad",
+   "step_number": 1,
+   "timestamp": "2026-09-18T07:39:21.444444Z",
+   "url_before": "http://127.0.0.1:4173/",
+   "url_after": "http://127.0.0.1:4173/#/results?q=Nova%20headphones",
+   "state_before": "cbae94b9095c",
+   "state_after": "fba9d8cabacf",
+   "action": {
+    "observation_id": "obs_235f895dfd",
+    "action": "type",
+    "element_id": 1,
+    "display_label": "Search products",
+    "text": "Nova headphones",
+    "submit": true,
+    "direction": null,
+    "rationale": "Start searching for Nova headphones",
+    "confidence": 0.9
+   },
+   "target": {
+    "role": "searchbox",
+    "name": "Search products",
+    "input_type": "search"
+   },
+   "outcome": "success",
+   "duration_ms": 91,
+   "error": null,
+   "screenshot_id": "step_01.jpg",
+   "recovery": false
+  },
+  {
+   "step_id": "fe4552c940",
+   "step_number": 2,
+   "timestamp": "2026-09-18T07:39:25.215438Z",
+   "url_before": "http://127.0.0.1:4173/#/results?q=Nova%20headphones",
+   "url_after": "http://127.0.0.1:4173/#/product/nova",
+   "state_before": "fba9d8cabacf",
+   "state_after": "bddc183c82c8",
+   "action": {
+    "observation_id": "obs_5b75672f1e",
+    "action": "click",
+    "element_id": 4,
+    "display_label": "Nova Headphones",
+    "text": null,
+    "submit": false,
+    "direction": null,
+    "rationale": "Click the product link to view details",
+    "confidence": 1.0
+   },
+   "target": {
+    "role": "link",
+    "name": "Nova Headphones",
+    "input_type": null
+   },
+   "outcome": "success",
+   "duration_ms": 120,
+   "error": null,
+   "screenshot_id": "step_02.jpg",
+   "recovery": false
+  },
+  {
+   "step_id": "25c0d3aaf1",
+   "step_number": 3,
+   "timestamp": "2026-09-18T07:39:29.947382Z",
+   "url_before": "http://127.0.0.1:4173/#/product/nova",
+   "url_after": "http://127.0.0.1:4173/#/cart",
+   "state_before": "bddc183c82c8",
+   "state_after": "72fb292f0f9e",
+   "action": {
+    "observation_id": "obs_5c5f93329d",
+    "action": "click",
+    "element_id": 4,
+    "display_label": "Add to Cart",
+    "text": null,
+    "submit": false,
+    "direction": null,
+    "rationale": "Add Nova Headphones to cart as they match the goal product and price.",
+    "confidence": 1.0
+   },
+   "target": {
+    "role": "button",
+    "name": "Add to Cart",
+    "input_type": null
+   },
+   "outcome": "success",
+   "duration_ms": 104,
+   "error": null,
+   "screenshot_id": "step_03.jpg",
+   "recovery": false
+  },
+  {
+   "step_id": "84a98b735d",
+   "step_number": 4,
+   "timestamp": "2026-09-18T07:39:34.948425Z",
+   "url_before": "http://127.0.0.1:4173/#/cart",
+   "url_after": "http://127.0.0.1:4173/#/cart",
+   "state_before": "72fb292f0f9e",
+   "state_after": "4639b8c84145",
+   "action": {
+    "observation_id": "obs_dabc2188ba",
+    "action": "click",
+    "element_id": 5,
+    "display_label": "Checkout",
+    "text": null,
+    "submit": false,
+    "direction": null,
+    "rationale": "Proceed to checkout to complete the goal",
+    "confidence": 1.0
+   },
+   "target": {
+    "role": "button",
+    "name": "Checkout",
+    "input_type": null
+   },
+   "outcome": "success",
+   "duration_ms": 120,
+   "error": null,
+   "screenshot_id": "step_04.jpg",
+   "recovery": false
+  },
+  {
+   "step_id": "77aff3f96f",
+   "step_number": 5,
+   "timestamp": "2026-09-18T07:39:40.101001Z",
+   "url_before": "http://127.0.0.1:4173/#/cart",
+   "url_after": "http://127.0.0.1:4173/#/cart",
+   "state_before": "4639b8c84145",
+   "state_after": "72fb292f0f9e",
+   "action": {
+    "observation_id": "obs_496d3ce159",
+    "action": "click",
+    "element_id": 0,
+    "display_label": "Close",
+    "text": null,
+    "submit": false,
+    "direction": null,
+    "rationale": "Dismiss the Join Nova+ dialog to proceed.",
+    "confidence": 0.9
+   },
+   "target": {
+    "role": "button",
+    "name": "Close",
+    "input_type": null
+   },
+   "outcome": "success",
+   "duration_ms": 100,
+   "error": null,
+   "screenshot_id": "step_05.jpg",
+   "recovery": true
+  },
+  {
+   "step_id": "a9fb9b2eee",
+   "step_number": 6,
+   "timestamp": "2026-09-18T07:39:44.472252Z",
+   "url_before": "http://127.0.0.1:4173/#/cart",
+   "url_after": "http://127.0.0.1:4173/#/checkout",
+   "state_before": "72fb292f0f9e",
+   "state_after": "bc8d1d094c92",
+   "action": {
+    "observation_id": "obs_8c4c3f02e7",
+    "action": "click",
+    "element_id": 5,
+    "display_label": "Checkout",
+    "text": null,
+    "submit": false,
+    "direction": null,
+    "rationale": "Proceed to checkout to complete the goal",
+    "confidence": 1.0
+   },
+   "target": {
+    "role": "button",
+    "name": "Checkout",
+    "input_type": null
+   },
+   "outcome": "success",
+   "duration_ms": 95,
+   "error": null,
+   "screenshot_id": "step_06.jpg",
+   "recovery": true
+  }
+ ],
+ "screenshot_id": "step_07.jpg",
+ "axe_results": [
+  {
+   "id": "color-contrast",
+   "impact": "serious",
+   "description": "Ensure the contrast between foreground and background colors meets WCAG 2 AA minimum contrast ratio thresholds",
+   "help": "Elements must meet minimum color contrast ratio thresholds",
+   "help_url": "https://dequeuniversity.com/rules/axe/4.10/color-contrast?application=axeAPI",
+   "nodes": [
+    {
+     "html": "<button class=\"pay-button\" type=\"button\" id=\"pay-btn\">Pay \u20b92,799</button>",
+     "target": [
+      "#pay-btn"
+     ],
+     "failure_summary": "Fix any of the following:\n  Element has insufficient color contrast of 1.33 (foreground color: #aab8df, background color: #c4d4ff, font size: 12.0pt (16px), font weight: normal). Expected contrast ratio of 4.5:1"
+    }
+   ]
+  },
+  {
+   "id": "label",
+   "impact": "critical",
+   "description": "Ensure every form element has a label",
+   "help": "Form elements must have labels",
+   "help_url": "https://dequeuniversity.com/rules/axe/4.10/label?application=axeAPI",
+   "nodes": [
+    {
+     "html": "<input id=\"checkout-email\" type=\"email\" autocomplete=\"off\" style=\"\">",
+     "target": [
+      "#checkout-email"
+     ],
+     "failure_summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element has no placeholder attribute\n  Element's default semantics were not overridden with role=\"none\" or role=\"presentation\""
+    }
+   ]
+  }
+ ],
+ "critic_findings": [
+  {
+   "finding_id": "697922f6c6",
+   "code": "SEM-001",
+   "category": "semantic_inconsistency",
+   "severity": "high",
+   "title": "Price inconsistency: Nova Headphones",
+   "evidence": "Product page shows \u20b92,499 (step 2); cart shows \u20b92,799 (step 4). Difference +\u20b9300 (+12.0%).",
+   "recommendation": "Ensure the price shown on the product page is the price charged in cart and checkout.",
+   "step_number": 4,
+   "state_id": "72fb292f0f9e",
+   "screenshot_id": null,
+   "source": "deterministic",
+   "verified": true,
+   "data": {
+    "entity": "Nova Headphones",
+    "before": 2499.0,
+    "after": 2799.0,
+    "difference": 300.0,
+    "percent": 12.0,
+    "before_state": "fba9d8cabacf",
+    "after_state": "72fb292f0f9e",
+    "before_context": "product_page",
+    "after_context": "cart",
+    "before_step": 2,
+    "after_step": 4
+   }
+  },
+  {
+   "finding_id": "f3b399c252",
+   "code": "UX-001",
+   "category": "friction",
+   "severity": "high",
+   "title": "Primary flow interrupted by an unexpected dialog",
+   "evidence": "Clicking \"Checkout\" opened the dialog \"Join Nova+ and save 10%\" instead of progressing; the URL stayed at /#/cart. The user must dismiss it and retry.",
+   "recommendation": "Do not intercept primary-flow actions (such as Checkout) with promotional dialogs.",
+   "step_number": 4,
+   "state_id": "4639b8c84145",
+   "screenshot_id": "step_05.jpg",
+   "source": "deterministic",
+   "verified": true,
+   "data": {
+    "trigger": "Checkout",
+    "dialog": "Join Nova+ and save 10%",
+    "route": "/#/cart"
+   }
+  },
+  {
+   "finding_id": "3e45b3b606",
+   "code": "REC-001",
+   "category": "recovery",
+   "severity": "info",
+   "title": "Autonomous recovery: obstruction dismissed",
+   "evidence": "Dismissed \"Join Nova+ and save 10%\" using \"Close\" and returned to the previous state.",
+   "recommendation": null,
+   "step_number": 5,
+   "state_id": "72fb292f0f9e",
+   "screenshot_id": "step_06.jpg",
+   "source": "deterministic",
+   "verified": true,
+   "data": {}
+  },
+  {
+   "finding_id": "2bb38d7365",
+   "code": "A11Y-001",
+   "category": "accessibility",
+   "severity": "high",
+   "title": "Elements must meet minimum color contrast ratio thresholds",
+   "evidence": "Fix any of the following:   Element has insufficient color contrast of 1.33 (foreground color: #aab8df, background color: #c4d4ff, font size: 12.0pt (16px), font weight: normal). Expected contrast ratio of 4.5:1",
+   "recommendation": "https://dequeuniversity.com/rules/axe/4.10/color-contrast?application=axeAPI",
+   "step_number": 6,
+   "state_id": "bc8d1d094c92",
+   "screenshot_id": "step_07.jpg",
+   "source": "axe",
+   "verified": true,
+   "data": {
+    "rule": "color-contrast",
+    "impact": "serious",
+    "html": "<button class=\"pay-button\" type=\"button\" id=\"pay-btn\">Pay \u20b92,799</button>",
+    "target": [
+     "#pay-btn"
+    ],
+    "affected_nodes": 1
+   }
+  },
+  {
+   "finding_id": "bcd434b4ae",
+   "code": "A11Y-002",
+   "category": "accessibility",
+   "severity": "critical",
+   "title": "Form elements must have labels",
+   "evidence": "Fix any of the following:   Element does not have an implicit (wrapped) <label>   Element does not have an explicit <label>   aria-label attribute does not exist or is empty   aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty   Element has no title attribute   Element has no placeholder attribute   Element's default semantics were",
+   "recommendation": "https://dequeuniversity.com/rules/axe/4.10/label?application=axeAPI",
+   "step_number": 6,
+   "state_id": "bc8d1d094c92",
+   "screenshot_id": "step_07.jpg",
+   "source": "axe",
+   "verified": true,
+   "data": {
+    "rule": "label",
+    "impact": "critical",
+    "html": "<input id=\"checkout-email\" type=\"email\" autocomplete=\"off\" style=\"\">",
+    "target": [
+     "#checkout-email"
+    ],
+    "affected_nodes": 1
+   }
+  }
+ ],
+ "journey_graph_nodes": [
+  {
+   "id": "cbae94b9095c",
+   "label": "Welcome to NovaMart",
+   "url": "http://127.0.0.1:4173/",
+   "route": "/",
+   "step_number": 0,
+   "page_type": "home",
+   "annotation": null,
+   "dialog": false,
+   "screenshot_id": "step_01.jpg",
+   "friction_count": 0,
+   "semantic_count": 0,
+   "accessibility_count": 0,
+   "visits": 1
+  },
+  {
+   "id": "fba9d8cabacf",
+   "label": "Results for \u201cnova headphones\u201d",
+   "url": "http://127.0.0.1:4173/#/results?q=Nova%20headphones",
+   "route": "/#/results?q=Nova+headphones",
+   "step_number": 1,
+   "page_type": "results",
+   "annotation": "\u20b92,499",
+   "dialog": false,
+   "screenshot_id": "step_02.jpg",
+   "friction_count": 0,
+   "semantic_count": 0,
+   "accessibility_count": 0,
+   "visits": 1
+  },
+  {
+   "id": "bddc183c82c8",
+   "label": "Nova Headphones",
+   "url": "http://127.0.0.1:4173/#/product/nova",
+   "route": "/#/product/nova",
+   "step_number": 2,
+   "page_type": "product",
+   "annotation": "\u20b92,499",
+   "dialog": false,
+   "screenshot_id": "step_03.jpg",
+   "friction_count": 0,
+   "semantic_count": 0,
+   "accessibility_count": 0,
+   "visits": 1
+  },
+  {
+   "id": "72fb292f0f9e",
+   "label": "Your cart",
+   "url": "http://127.0.0.1:4173/#/cart",
+   "route": "/#/cart",
+   "step_number": 3,
+   "page_type": "cart",
+   "annotation": "\u20b92,799",
+   "dialog": false,
+   "screenshot_id": "step_04.jpg",
+   "friction_count": 0,
+   "semantic_count": 1,
+   "accessibility_count": 0,
+   "visits": 2
+  },
+  {
+   "id": "4639b8c84145",
+   "label": "Your cart + dialog",
+   "url": "http://127.0.0.1:4173/#/cart",
+   "route": "/#/cart",
+   "step_number": 4,
+   "page_type": "cart",
+   "annotation": "\u20b92,799",
+   "dialog": true,
+   "screenshot_id": "step_05.jpg",
+   "friction_count": 1,
+   "semantic_count": 0,
+   "accessibility_count": 0,
+   "visits": 1
+  },
+  {
+   "id": "bc8d1d094c92",
+   "label": "Checkout",
+   "url": "http://127.0.0.1:4173/#/checkout",
+   "route": "/#/checkout",
+   "step_number": 6,
+   "page_type": "checkout",
+   "annotation": null,
+   "dialog": false,
+   "screenshot_id": "step_07.jpg",
+   "friction_count": 0,
+   "semantic_count": 0,
+   "accessibility_count": 2,
+   "visits": 1
+  }
+ ],
+ "journey_graph_edges": [
+  {
+   "id": "e1",
+   "source": "cbae94b9095c",
+   "target": "fba9d8cabacf",
+   "action": "type \u201cNova headphones\u201d",
+   "step_number": 1,
+   "duration_ms": 91,
+   "outcome": "success",
+   "recovered": false
+  },
+  {
+   "id": "e2",
+   "source": "fba9d8cabacf",
+   "target": "bddc183c82c8",
+   "action": "click \u201cNova Headphones\u201d",
+   "step_number": 2,
+   "duration_ms": 120,
+   "outcome": "success",
+   "recovered": false
+  },
+  {
+   "id": "e3",
+   "source": "bddc183c82c8",
+   "target": "72fb292f0f9e",
+   "action": "click \u201cAdd to Cart\u201d",
+   "step_number": 3,
+   "duration_ms": 104,
+   "outcome": "success",
+   "recovered": false
+  },
+  {
+   "id": "e4",
+   "source": "72fb292f0f9e",
+   "target": "4639b8c84145",
+   "action": "click \u201cCheckout\u201d",
+   "step_number": 4,
+   "duration_ms": 120,
+   "outcome": "success",
+   "recovered": false
+  },
+  {
+   "id": "e5",
+   "source": "4639b8c84145",
+   "target": "72fb292f0f9e",
+   "action": "click \u201cClose\u201d",
+   "step_number": 5,
+   "duration_ms": 100,
+   "outcome": "success",
+   "recovered": true
+  },
+  {
+   "id": "e6",
+   "source": "72fb292f0f9e",
+   "target": "bc8d1d094c92",
+   "action": "click \u201cCheckout\u201d",
+   "step_number": 6,
+   "duration_ms": 95,
+   "outcome": "success",
+   "recovered": true
+  }
+ ],
+ "journey_facts": [
+  {
+   "kind": "product_price",
+   "entity": "Nova Headphones",
+   "value": 2499.0,
+   "currency": "INR",
+   "context": "product_page",
+   "step_number": 2,
+   "url": "/#/results?q=Nova+headphones",
+   "state_id": "fba9d8cabacf"
+  },
+  {
+   "kind": "product_price",
+   "entity": "Nova Headphones",
+   "value": 2499.0,
+   "currency": "INR",
+   "context": "product_page",
+   "step_number": 3,
+   "url": "/#/product/nova",
+   "state_id": "bddc183c82c8"
+  },
+  {
+   "kind": "product_price",
+   "entity": "Nova Headphones",
+   "value": 2799.0,
+   "currency": "INR",
+   "context": "cart",
+   "step_number": 4,
+   "url": "/#/cart",
+   "state_id": "72fb292f0f9e"
+  },
+  {
+   "kind": "product_price",
+   "entity": "Nova Headphones",
+   "value": 2799.0,
+   "currency": "INR",
+   "context": "cart",
+   "step_number": 5,
+   "url": "/#/cart",
+   "state_id": "4639b8c84145"
+  }
+ ],
+ "status": "completed",
+ "next_action": {
+  "observation_id": "obs_8c4c3f02e7",
+  "action": "click",
+  "element_id": 5,
+  "display_label": "Checkout",
+  "text": null,
+  "submit": false,
+  "direction": null,
+  "rationale": "Proceed to checkout to complete the goal",
+  "confidence": 1.0
+ },
+ "last_outcome": "success",
+ "last_outcome_note": "",
+ "goal_progress": 1.0,
+ "goal_completed": true,
+ "max_steps": 12,
+ "recovery_attempts": 1,
+ "max_recovery_attempts": 2,
+ "in_recovery": false,
+ "accessibility_score": 61,
+ "current_page_summary": "Cart with one item, subtotal \u20b92,799",
+ "current_state_id": "bc8d1d094c92",
+ "friction": {
+  "total_actions": 6,
+  "failed_interactions": 0,
+  "blocked_interactions": 0,
+  "backtracks": 0,
+  "repeated_states": 1,
+  "recoveries": 1,
+  "interruptions": 1,
+  "dead_ends": 0,
+  "no_progress_actions": 0,
+  "rejected_actions": 0
+ },
+ "metrics": {
+  "started_at": "2026-09-18T07:39:17.180365Z",
+  "finished_at": "2026-09-18T07:39:44.984693Z",
+  "model_calls": 6,
+  "model_latencies_ms": [
+   2677,
+   3496,
+   4261,
+   4553,
+   4716,
+   3862
+  ],
+  "schema_failures": 0
+ },
+ "run_error": null
+}
