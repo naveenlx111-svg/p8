@@ -8,19 +8,19 @@ export function AccessibilityPanel({ state }: { state: RunState }) {
   const sc = state.score
   const score = sc?.accessibility_score ?? 100
   const counts = sc?.accessibility_counts ?? { critical: 0, serious: 0, moderate: 0, minor: 0 }
-  const color = score >= 90 ? 'text-emerald-600' : score >= 70 ? 'text-amber-600' : 'text-red-600'
+  const color = score >= 90 ? 'score-good' : score >= 70 ? 'score-warning' : 'score-poor'
   const fr = sc?.friction
   const report = state.summary?.report_url
 
   return (
-    <section className="flex min-h-0 flex-col rounded-xl border border-slate-200 bg-white">
+    <section className="workspace-panel accessibility-panel flex min-h-0 flex-col rounded-xl border border-slate-200 bg-white">
       <h2 className="border-b border-slate-200 px-3 py-2 text-xs font-bold tracking-widest text-slate-500">ACCESSIBILITY &amp; FRICTION</h2>
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
-        <div className="flex items-center gap-4">
+        <div className="accessibility-summary flex items-center gap-4">
           <div>
-            <div className="text-[10px] font-bold tracking-widest text-slate-500">AUTOMATED ACCESSIBILITY RISK SCORE</div>
+            <div className="text-[10px] font-bold tracking-widest text-slate-500">{sc ? 'ACCESSIBILITY RISK SCORE' : 'AWAITING FIRST AUDIT'}</div>
             <div className={`score-pop text-4xl font-extrabold ${color}`} key={score}>
-              {score}<span className="text-lg text-slate-400">/100</span>
+              {sc ? score : '—'}<span className="text-lg text-slate-400">/100</span>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">

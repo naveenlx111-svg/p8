@@ -101,10 +101,10 @@ export function DecisionStream({ state, onReplay }: { state: RunState; onReplay:
   const s = state.summary
 
   return (
-    <section className="flex min-h-0 flex-col rounded-xl border border-slate-200 bg-white">
+    <section className="workspace-panel flex min-h-0 flex-col rounded-xl border border-slate-200 bg-white">
       <h2 className="border-b border-slate-200 px-3 py-2 text-xs font-bold tracking-widest text-slate-500">DECISION STREAM</h2>
       <div ref={ref} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3">
-        {state.stream.length === 0 && <p className="text-sm text-slate-500">Decisions, findings and recoveries appear here as the agent works.</p>}
+        {state.stream.length === 0 && <div className="stream-empty"><div className="empty-icon" aria-hidden="true">≋</div><h3>Every decision, in the open.</h3><p>Follow the reasoning behind each action.<br />Findings and recoveries will appear here.</p><div className="stream-steps"><span><b>01</b> Observe</span><span><b>02</b> Decide</span><span><b>03</b> Act</span></div></div>}
         {state.stream.map(it => <Item key={it.seq} it={it} />)}
         {state.status === 'completed' && s && (
           <div className="slide-in rounded-lg bg-emerald-600 px-3 py-3 text-white">

@@ -31,12 +31,12 @@ interface Props {
   disabled: boolean
 }
 
-const input = 'rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-900 focus:border-blue-500 focus:outline-none disabled:bg-slate-50'
+const input = 'rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-900 focus:border-blue-500 focus:outline-none disabled:bg-slate-50'
 
 export function TargetBar({ target, setTarget, disabled }: Props) {
   const set = (k: keyof Target) => (e: React.ChangeEvent<HTMLInputElement>) => setTarget({ ...target, [k]: e.target.value })
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50 px-5 py-2 text-xs text-slate-600">
+    <div className="target-bar flex flex-wrap items-center gap-2 px-5 py-2 text-xs text-slate-300">
       <label className="flex items-center gap-1.5 font-semibold">
         Target URL
         <input aria-label="Target URL" value={target.url} onChange={set('url')} disabled={disabled} placeholder="https://…" className={`${input} w-72 font-mono`} />
@@ -49,18 +49,12 @@ export function TargetBar({ target, setTarget, disabled }: Props) {
         and page shows
         <input aria-label="Success text" value={target.successText} onChange={set('successText')} disabled={disabled} placeholder="auto" className={`${input} w-40`} />
       </label>
-      <select
-        aria-label="Example targets"
-        disabled={disabled}
-        value=""
-        onChange={e => {
-          const p = PRESETS[Number(e.target.value)]
-          if (p) setTarget(p.t)
-        }}
-        className="ml-auto rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800"
-      >
+      <select aria-label="Example targets" disabled={disabled} value="" onChange={e => {
+        const preset = PRESETS[Number(e.target.value)]
+        if (preset) setTarget(preset.t)
+      }} className="target-examples rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800">
         <option value="">Examples…</option>
-        {PRESETS.map((p, i) => <option key={p.name} value={i}>{p.name}</option>)}
+        {PRESETS.map((preset, index) => <option key={preset.name} value={index}>{preset.name}</option>)}
       </select>
     </div>
   )

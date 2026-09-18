@@ -1,4 +1,4 @@
-import { Background, Handle, MarkerType, Position, ReactFlow, type Edge, type Node, type NodeProps, useReactFlow, ReactFlowProvider } from '@xyflow/react'
+import { BaseEdge, getSmoothStepPath, type EdgeProps, Handle, MarkerType, Position, ReactFlow, type Edge, type Node, type NodeProps, useReactFlow, ReactFlowProvider } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useEffect, useMemo } from 'react'
 import type { JourneyNode } from '../types'
@@ -31,6 +31,24 @@ function StateNode({ data }: NodeProps<Node<StateNodeData>>) {
   )
 }
 
+// Bound labels to the available gap; separate the outbound and recovery lanes.
+function ActionEdge(props: EdgeProps) {
+  const [path, centerX, centerY] = getSmoothStepPath(props)
+  const down = props.sourceHandleId === 'bs'
+  const up = props.sourceHandleId === 'ts'
+  const width = down || up ? 140 : 82
+  const x = down || up ? props.sourceX : centerX
+  const y = down ? props.sourceY + 38 : up ? props.sourceY - 34 : centerY
+  return <>
+    <BaseEdge path={path} markerEnd={props.markerEnd} style={props.style} />
+    <foreignObject x={x - width / 2} y={y - 25} width={width} height={50} className="journey-action-label">
+      <div title={String(props.label ?? '')}>{props.label}</div>
+    </foreignObject>
+  </>
+}
+
+const edgeTypes = { action: ActionEdge }
+
 const nodeTypes = { state: StateNode }
 
 function Graph({ state, onInspect }: { state: RunState; onInspect: (id: string) => void }) {
@@ -52,7 +70,7 @@ function Graph({ state, onInspect }: { state: RunState; onInspect: (id: string) 
     const nodes: Node<StateNodeData>[] = state.nodeOrder.map(id => {
       const n = state.nodes[id]
       return {
-        id, type: 'state', position: { x: col[id] * 250, y: row(n) * 120 },
+        id, type: 'state', position: { x: col[id] * 250, y: row(n) * 210 },
         data: { n, active: id === state.activeNode && state.status === 'running', goal: id === goalNode },
       }
     })
@@ -63,11 +81,11 @@ function Graph({ state, onInspect }: { state: RunState; onInspect: (id: string) 
         const [sh, th] = rs < rt ? ['bs', 'tt'] : rs > rt ? ['ts', 'bt'] : ['r', 'l']
         const color = e.recovered ? '#d97706' : e.outcome === 'success' ? '#64748b' : '#dc2626'
         return {
-          id: e.id, source: e.source, target: e.target, sourceHandle: sh, targetHandle: th, type: 'smoothstep',
-          label: `${e.step_number}. ${e.action.length > 22 ? e.action.slice(0, 21) + '…' : e.action}`, animated: e.recovered,
+          id: e.id, source: e.source, target: e.target, sourceHandle: sh, targetHandle: th, type: 'action',
+          label: `${e.step_number}. ${e.action}`, animated: e.recovered,
           style: { stroke: color, strokeWidth: 2, strokeDasharray: e.recovered ? '5 4' : undefined },
-          labelStyle: { fontSize: 10, fontWeight: 600, fill: '#334155' },
-          labelBgStyle: { fill: '#fff' },
+          labelStyle: { fontSize: 10, fontWeight: 600, fill: 'var(--text)' },
+          labelBgStyle: { fill: 'var(--surface)' },
           markerEnd: { type: MarkerType.ArrowClosed, color },
         }
       })
@@ -81,24 +99,24 @@ function Graph({ state, onInspect }: { state: RunState; onInspect: (id: string) 
 
   return (
     <ReactFlow
-      nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView proOptions={{ hideAttribution: true }}
+      nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} fitView proOptions={{ hideAttribution: true }}
       nodesDraggable={false} nodesConnectable={false} onNodeClick={(_, n) => onInspect(n.id)} minZoom={0.3}
     >
-      <Background gap={20} color="#e2e8f0" />
     </ReactFlow>
   )
 }
 
 export function JourneyGraph({ state, onInspect }: { state: RunState; onInspect: (id: string) => void }) {
   return (
-    <section className="flex min-h-0 flex-col rounded-xl border border-slate-200 bg-white">
+    <section className="workspace-panel flex min-h-0 flex-col rounded-xl border border-slate-200 bg-white">
       <h2 className="flex items-center border-b border-slate-200 px-3 py-2 text-xs font-bold tracking-widest text-slate-500">
         JOURNEY GRAPH
         <span className="ml-auto font-medium normal-case tracking-normal text-slate-400">
           {state.nodeOrder.length} states · {state.edges.length} actions · click a state for its evidence
         </span>
       </h2>
-      <div className="min-h-0 flex-1">
+      <div className="journey-canvas relative min-h-0 flex-1">
+        {state.nodeOrder.length === 0 && <div className="journey-empty"><div aria-hidden="true"><span /> <i /> <span /> <i /> <span /></div><p>Your path will take shape here.</p></div>}
         <ReactFlowProvider>
           <Graph state={state} onInspect={onInspect} />
         </ReactFlowProvider>
