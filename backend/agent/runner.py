@@ -1,7 +1,7 @@
 """Runs one live mission end-to-end and always terminates with run_completed or run_failed."""
 from __future__ import annotations
 
-from backend.agent.goal import compile_goal
+from backend.agent.goal import compile_goal, focus_words
 from backend.agent.graph import RunContext, build_graph, save_state, summarize
 from backend.agent.llm import build_model
 from backend.config import model_name, settings
@@ -15,7 +15,7 @@ def new_state(goal: str | GoalSpec, target_url: str | None = None, run_id: str |
               max_steps: int | None = None) -> AgentState:
     spec = goal if isinstance(goal, GoalSpec) else compile_goal(goal, success_url, success_text)
     return AgentState(run_id=run_id or short_id(), goal=spec, target_url=target_url or settings.target_url,
-                      provider=settings.provider, model=model_name(), max_steps=max(1, min(max_steps or settings.max_steps, 100)),
+                      provider=settings.provider, model=model_name(), max_steps=max(1, min(max_steps or settings.max_steps, 300)),
                       stall_limit=settings.stall_limit,
                       max_recovery_attempts=settings.max_recoveries)
 
@@ -28,7 +28,7 @@ async def run_live(state: AgentState, bus: EventBus) -> AgentState:
         "vision_mode": settings.vision_mode, "max_steps": state.max_steps,
         "artifact_base": f"/artifacts/run_{state.run_id}/",
     })
-    session = BrowserSession(run_dir)
+    session = BrowserSession(run_dir, focus_words(state.goal.raw))
     try:
         model = build_model()
         await session.start(state.target_url)

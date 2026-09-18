@@ -25,7 +25,7 @@ def cart_shows(obs: Observation, product: str) -> bool:
 def verify(goal: GoalSpec, obs: Observation, cart_product_seen: bool = False) -> Verdict:
     crit = goal.success
     evidence, missing = [], []
-    if not (crit.url_contains or crit.visible_input_types or crit.visible_text_any):
+    if not (crit.url_contains or crit.visible_input_types or crit.visible_text_any):  # forbid-only is not enough
         return Verdict(False, [], ["goal has no deterministic success criteria"])
 
     route = obs.route.lower()
@@ -51,6 +51,11 @@ def verify(goal: GoalSpec, obs: Observation, cart_product_seen: bool = False) ->
             evidence.append(f'"{crit.cart_contains}" was shown in the cart')
         else:
             missing.append(f'"{crit.cart_contains}" never appeared in the cart')
+
+    text_now = obs.visible_text.lower()
+    contradiction = next((t for t in crit.forbid_text_any if t in text_now), None)
+    if contradiction:
+        missing.append(f'page says "{contradiction}"')
 
     if obs.dialog_open:
         missing.append("no blocking dialog")

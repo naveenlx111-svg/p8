@@ -160,3 +160,17 @@ def test_safety_allows_credentials_given_in_goal_only():
     pw = ObservedElement(element_id=0, role="textbox", input_type="password")
     assert safety.check(typ, pw, False, "log in with password secret_sauce") is None
     assert safety.check(typ, pw, False, "log in") is not None
+
+
+def test_completion_rejects_empty_cart_even_if_url_matches():
+    g = compile_goal("Search for earphones, add one to the cart, and open the cart.", success_url=["cart"])
+    assert not completion.verify(g, obs("Your Amazon Cart is empty", route="/cart")).completed
+    assert completion.verify(g, obs("Subtotal (1 item): ₹299", route="/cart")).completed
+
+
+def test_safety_blocks_invented_identity_data():
+    typ = BrowserAction(observation_id="o", action=ActionType.TYPE, element_id=0, text="testuser@example.com")
+    email = ObservedElement(element_id=0, role="textbox", name="Enter mobile number or email")
+    assert safety.check(typ, email, False, "add earphones to cart") is not None
+    user = BrowserAction(observation_id="o", action=ActionType.TYPE, element_id=0, text="standard_user")
+    assert safety.check(user, ObservedElement(element_id=0, role="textbox", name="Username"), False, "log in as standard_user") is None

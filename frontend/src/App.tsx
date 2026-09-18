@@ -36,6 +36,7 @@ export default function App() {
           goal: target.goal, mode: 'live', target_url: target.url.trim() || null,
           success_url: target.successUrl.trim() ? [target.successUrl.trim()] : null,
           success_text: target.successText.trim() ? [target.successText.trim()] : null,
+          max_steps: Number(target.maxSteps) > 0 ? Number(target.maxSteps) : null,
         })}
         onReplay={() => launch({ mode: 'replay', replay: 'golden' })}
       />

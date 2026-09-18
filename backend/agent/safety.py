@@ -9,6 +9,8 @@ IRREVERSIBLE = re.compile(
     r"\b(pay|place (?:your )?order|buy now|purchase|confirm (?:order|payment)|complete (?:order|purchase)|"
     r"delete|remove account|close account|deactivate|unsubscribe|subscribe|join|send|transfer)\b", re.I)
 SENSITIVE_FIELD = re.compile(r"\b(card|cvv|cvc|password|passcode|otp|pin|ssn|aadhaar|iban|account number)\b", re.I)
+# Identity fields: the agent must never invent an email/phone/username to get past a login or signup wall.
+IDENTITY_FIELD = re.compile(r"\b(e-?mail|mobile|phone|username|user name|login|user id)\b", re.I)
 
 
 def check(action: BrowserAction, element: ObservedElement | None, allow_irreversible: bool, goal_text: str = "") -> str | None:
@@ -23,4 +25,8 @@ def check(action: BrowserAction, element: ObservedElement | None, allow_irrevers
         if action.text and len(action.text) >= 3 and action.text in goal_text:
             return None
         return f'typing into a sensitive field ("{element.name or element.input_type}") is not allowed unless the value is given in the goal'
+    if action.action == ActionType.TYPE and (element.input_type in ("email", "tel") or IDENTITY_FIELD.search(label)):
+        if not (action.text and action.text in goal_text):
+            return (f'identity data may only be typed if the goal provides it ("{action.text}" is not in the goal); '
+                    'if a sign-in wall blocks the goal, report it instead of inventing credentials')
     return None

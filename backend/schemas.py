@@ -61,6 +61,8 @@ class SuccessCriteria(BaseModel):
     visible_text_any: list[str] = Field(default_factory=list)
     # The goal's named product must have been visibly present on a cart screen during the journey.
     cart_contains: str | None = None
+    # Text that proves the goal is NOT met even if the URL looks right (e.g. "your cart is empty").
+    forbid_text_any: list[str] = Field(default_factory=list)
 
 
 class GoalSpec(BaseModel):
@@ -308,7 +310,7 @@ class AgentState(BaseModel):
     last_outcome_note: str = ""
     goal_progress: float = Field(default=0.0, ge=0.0, le=1.0)
     goal_completed: bool = False
-    max_steps: int = 40
+    max_steps: int = 100
     stall_limit: int = 8
     last_progress_step: int = 0
     best_progress: float = 0.0

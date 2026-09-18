@@ -295,6 +295,8 @@ def build_graph(ctx: RunContext):
         else:
             result = await ctx.session.execute(action)
             step.outcome, step.duration_ms, step.error = result.outcome, result.duration_ms, result.error
+            if result.note:
+                s.last_outcome_note = result.note
         s.last_outcome = step.outcome
         s.execution_history.append(step)
         s.friction.total_actions += 1

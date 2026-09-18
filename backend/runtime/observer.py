@@ -15,12 +15,14 @@ from backend.schemas import ObservedElement, Observation, short_id
 # Collects visible interactive controls with their user-perceivable role and accessible name.
 # Returns {els: Element[], info: object[]} so handles can be taken without mutating the DOM.
 COLLECT_JS = r"""
-(maxElements) => {
+({maxElements, focusWords}) => {
   const SEL = 'button, a[href], input:not([type=hidden]), textarea, select, summary, [role=button], [role=link], [role=tab], [role=menuitem], [role=checkbox], [role=switch], [tabindex]:not([tabindex="-1"])';
   const txt = (s) => (s || '').replace(/\s+/g, ' ').trim();
   const isVisible = (el) => {
     const r = el.getBoundingClientRect();
     if (r.width < 2 || r.height < 2) return false;
+    // Parked off-page horizontally (screen-reader-only helpers, e.g. keyboard-shortcut menus): not seen by a sighted user.
+    if (r.right <= 0 || r.left >= Math.max(document.documentElement.scrollWidth, innerWidth)) return false;
     const cs = getComputedStyle(el);
     if (cs.visibility === 'hidden' || cs.display === 'none' || parseFloat(cs.opacity) === 0) return false;
     return !el.closest('[hidden],[aria-hidden="true"]');
@@ -57,7 +59,17 @@ COLLECT_JS = r"""
     }
     return 'generic';
   };
-  const dialogs = [...document.querySelectorAll('[role=dialog],[role=alertdialog],dialog[open]')].filter(isVisible);
+  // A dialog only counts if it actually confronts the user: modal, or an overlay covering real screen area.
+  // (Sites use role=dialog for permanent layout panels, e.g. filter sidebars; those are not interruptions.)
+  const blocking = (d) => {
+    if (d.getAttribute('aria-modal') === 'true') return true;
+    try { if (d.matches(':modal')) return true; } catch (e) {}
+    const cs = getComputedStyle(d), r = d.getBoundingClientRect();
+    const w = Math.max(0, Math.min(r.right, innerWidth) - Math.max(r.left, 0));
+    const h = Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0));
+    return (cs.position === 'fixed' || cs.position === 'absolute') && w * h >= 0.1 * innerWidth * innerHeight;
+  };
+  const dialogs = [...document.querySelectorAll('[role=dialog],[role=alertdialog],dialog[open]')].filter(isVisible).filter(blocking);
   const modal = dialogs.find(d => d.getAttribute('aria-modal') === 'true' || d.tagName === 'DIALOG') || null;
   const covered = (el) => {
     const r = el.getBoundingClientRect();
@@ -74,7 +86,19 @@ COLLECT_JS = r"""
     if (r.bottom >= 0 && r.top <= innerHeight) return 0;
     return r.top > innerHeight ? r.top - innerHeight : -r.bottom;
   };
-  const rank = (el) => (modal && modal.contains(el)) ? -1 : (dist(el) === 0 ? 0 : 1);
+  const CHROME = 'header, nav, footer, [role=banner], [role=navigation], [role=contentinfo]';
+  const words = (focusWords || []).map(w => w.toLowerCase());
+  const relevant = (el) => {
+    const n = (accName(el) + ' ' + (el.getAttribute('placeholder') || '')).toLowerCase();
+    return words.some(w => n.includes(w));
+  };
+  // Tiers: open dialog, goal-relevant, main content on screen, main content off screen (by distance), site chrome.
+  const rank = (el) => {
+    if (modal && modal.contains(el)) return -2;
+    if (relevant(el)) return -1;
+    if (el.closest(CHROME)) return 2;
+    return dist(el) === 0 ? 0 : 1;
+  };
   const ordered = all.map((el, i) => ({el, i, k: rank(el), d: dist(el)}))
     .sort((a, b) => a.k - b.k || (a.k === 1 ? a.d - b.d : a.i - b.i)).map(o => o.el);
   const seen = new Set();
@@ -98,13 +122,28 @@ COLLECT_JS = r"""
       bbox: { x: r.x, y: r.y, width: r.width, height: r.height },
     });
   }
-  const main = document.querySelector('main') || document.body;
+  // Page text a user reads: main content first, without the repeated site chrome (header/nav/footer).
+  const main = document.querySelector('main, [role=main]');
+  let pageText = '';
+  if (main) { pageText = txt(main.innerText); }
+  else {
+    const parts = [];
+    const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    let total = 0, node;
+    while ((node = walk.nextNode()) && total < 2600) {
+      const p = node.parentElement;
+      if (!p || p.closest('script,style,noscript,template') || p.closest(CHROME) || !p.getClientRects().length) continue;
+      const t = txt(node.textContent);
+      if (t) { parts.push(t); total += t.length + 1; }
+    }
+    pageText = parts.join(' ');
+  }
   const dialog = dialogs[0];
   return {
     els, info,
     heading: txt(document.querySelector('h1')?.innerText),
     title: document.title,
-    visible_text: txt(main.innerText).slice(0, 1800),
+    visible_text: pageText.slice(0, 2400),
     dialog_open: dialogs.length > 0,
     dialog_name: dialog ? (dialog.getAttribute('aria-label') || byIds(dialog.getAttribute('aria-labelledby') || '') || txt(dialog.innerText).slice(0, 80)) : '',
     dialog_text: dialog ? txt(dialog.innerText).slice(0, 400) : '',
@@ -135,9 +174,9 @@ async def aria_snapshot(page: Page, limit: int = 3500) -> str:
     return snap[:limit]
 
 
-async def observe(page: Page, max_elements: int = 40) -> tuple[Observation, ElementRegistry]:
+async def observe(page: Page, max_elements: int = 40, focus_words: list[str] | None = None) -> tuple[Observation, ElementRegistry]:
     obs_id = "obs_" + short_id()
-    handle = await page.evaluate_handle(COLLECT_JS, max_elements)
+    handle = await page.evaluate_handle(COLLECT_JS, {"maxElements": max_elements, "focusWords": focus_words or []})
     try:
         data = await (await handle.get_property("info")).json_value()
         els_prop = await handle.get_property("els")

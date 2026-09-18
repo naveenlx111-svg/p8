@@ -26,6 +26,7 @@ class ActionResult:
     duration_ms: int
     target: TargetDescriptor | None = None
     error: str | None = None
+    note: str | None = None
 
 
 async def settle(page: Page) -> None:
@@ -86,6 +87,7 @@ async def execute(page: Page, registry: ElementRegistry, action: BrowserAction, 
             # A person submits a search box with Enter; small models often forget to ask for it.
             is_search = element.role == "searchbox" or "search" in (element.name or element.placeholder or "").lower()
             if action.submit or is_search:
+                action.submit = True  # recorded, so history/read-back reflect what actually happened
                 await handle.press("Enter", timeout=timeout_ms)
         elif action.action == ActionType.SCROLL:
             await page.mouse.wheel(0, -600 if action.direction == "up" else 600)

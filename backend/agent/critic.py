@@ -179,10 +179,11 @@ def _count_failure(state: AgentState, rep: TransitionReport, step: ExecutionStep
         rep.notes.append(f'"{label}" has now failed twice. Try a genuinely different approach if one exists.')
     if n >= 3 and not state.blocked_reason:
         state.friction.dead_ends += 1
-        state.blocked_reason = f'goal blocked by an application defect: "{label}" failed {n} times'
+        state.blocked_reason = (f'journey blocked: "{label}" failed {n} times (possible application defect '
+                                f'or automation limitation; review the evidence)')
         rep.findings.append(CriticFinding(
             category="dead_end", severity="high", title=f'Goal blocked: "{label}" fails repeatedly',
             evidence=(f'{step.action.action.value} "{label}" failed {n} times with the same result; '
                       "the journey cannot continue without a workaround."),
-            recommendation="Investigate this control; a real user would be unable to finish this journey.",
+            recommendation="Check the evidence: if a person hits the same result, it is a defect blocking this journey.",
             step_number=step.step_number, state_id=obs.fingerprint, screenshot_id=obs.screenshot_id, verified=True))
