@@ -83,6 +83,7 @@ class GoalSpec(BaseModel):
     success: SuccessCriteria = Field(default_factory=SuccessCriteria)
     forbidden_actions: list[str] = Field(default_factory=lambda: [
         "complete payment", "place order", "delete data", "close account", "send message",
+        "report emergency", "call emergency services", "trigger emergency",
     ])
 
 

@@ -1,4 +1,4 @@
-import { PRESETS, type Target } from '../presets'
+import { ANDROID_PRESETS, PRESETS, type Target } from '../presets'
 
 export interface AndroidDevice {
   serial: string
@@ -86,6 +86,13 @@ export function TargetBar({ target, setTarget, disabled, devices, refreshingDevi
       }} className="target-examples rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800">
         <option value="">Examples…</option>
         {PRESETS.map((preset, index) => <option key={preset.name} value={index}>{preset.name}</option>)}
+      </select>}
+      {platform === 'android' && <select aria-label="Android demo apps" disabled={disabled} value="" onChange={e => {
+        const preset = ANDROID_PRESETS[Number(e.target.value)]
+        if (preset) setTarget({ ...preset.t, deviceSerial: target.deviceSerial })
+      }} className="target-examples rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800">
+        <option value="">Android demos…</option>
+        {ANDROID_PRESETS.map((preset, index) => <option key={preset.name} value={index}>{preset.name}</option>)}
       </select>}
       {platform === 'android' && <span className="text-[10px] text-slate-400">{devices.length ? `${devices.filter(d => d.status === 'device').length} ready` : 'No ADB device detected yet'}</span>}
     </div>

@@ -39,3 +39,20 @@ export const PRESETS: { name: string; t: Target }[] = [
     t: { goal: 'Find the Samsung galaxy s6, add it to the cart, and open the cart.', url: 'https://demoblaze.com/', successUrl: 'cart', successText: 'Samsung galaxy s6' },
   },
 ]
+
+// Saved Android configurations contain intent and acceptance criteria only.
+// The agent discovers every action live from the connected device's current UI.
+export const ANDROID_PRESETS: { name: string; t: Target }[] = [
+  {
+    name: 'Sanjeevani · Condition Lookup',
+    t: {
+      platform: 'android',
+      goal: 'Use the Condition Lookup tool to search for dehydration. Do not report an emergency, call anyone, or send anything.',
+      url: '',
+      successUrl: '',
+      successText: 'Dehydration',
+      packageName: 'com.example.sanjeevani',
+      maxSteps: '12',
+    },
+  },
+]

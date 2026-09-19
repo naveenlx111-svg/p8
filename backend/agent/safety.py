@@ -7,7 +7,8 @@ from backend.schemas import ActionType, BrowserAction, ObservedElement
 
 IRREVERSIBLE = re.compile(
     r"\b(pay|place (?:your )?order|buy now|purchase|confirm (?:order|payment)|complete (?:order|purchase)|"
-    r"delete|remove account|close account|deactivate|unsubscribe|subscribe|join|send|transfer)\b", re.I)
+    r"delete|remove account|close account|deactivate|unsubscribe|subscribe|join|send|transfer|"
+    r"report emergency|call emergency(?: services)?|contact emergency(?: services)?|trigger emergency|sos)\b", re.I)
 SENSITIVE_FIELD = re.compile(r"\b(card|cvv|cvc|password|passcode|otp|pin|ssn|aadhaar|iban|account number)\b", re.I)
 # Identity fields: the agent must never invent an email/phone/username to get past a login or signup wall.
 IDENTITY_FIELD = re.compile(r"\b(e-?mail|mobile|phone|username|user name|login|user id)\b", re.I)
