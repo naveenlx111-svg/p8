@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react'
-import { AccessibilityPanel } from './components/AccessibilityPanel'
-import { BrowserPanel } from './components/BrowserPanel'
+import { ActionTimeline } from './components/ActionTimeline'
+import { AppHeader, type View } from './components/AppHeader'
+import { BrowserFrame } from './components/BrowserFrame'
 import { ComparisonBar } from './components/ComparisonBar'
-import { DecisionStream } from './components/DecisionStream'
-import { Header } from './components/Header'
-import { JourneyGraph } from './components/JourneyGraph'
-import { TargetBar, type AndroidDevice } from './components/TargetBar'
+import { FindingList } from './components/FindingList'
+import { LogView } from './components/LogView'
+import { MetricStrip } from './components/MetricStrip'
+import { ReportPanel } from './components/ReportPanel'
+import { RunHeader, type Tab } from './components/RunHeader'
+import { ScreenMap } from './components/ScreenMap'
+import { TestSetup, type AndroidDevice } from './components/TestSetup'
+import { isLive } from './lib'
 import { PRESETS, type Target } from './presets'
 import { useRun } from './useRun'
 import type { RunComparison } from './types'
@@ -28,6 +33,8 @@ export default function App() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [inspect, setInspect] = useState<string | null>(null)
+  const [view, setView] = useState<View>('test')
+  const [tab, setTab] = useState<Tab>('watch')
   const [baselineId, setBaselineId] = useState<string | null>(() => {
     try { return localStorage.getItem('pathlens-baseline-run') } catch { return null }
   })
@@ -85,6 +92,8 @@ export default function App() {
     setComparison(null)
     try {
       await start(body)
+      setView('run')
+      setTab('watch')
     } catch (e) {
       setError(String(e))
     } finally {
@@ -117,50 +126,95 @@ export default function App() {
     }
   }
 
+  const platform = target.platform ?? 'web'
+  const running = isLive(state)
+  const liveBody = () => ({
+    goal: target.goal, mode: 'live', platform,
+    target_url: platform === 'web' ? target.url.trim() || null : null,
+    device_serial: target.deviceSerial?.trim() || null,
+    android_package: target.packageName?.trim() || null,
+    android_activity: target.activity?.trim() || null,
+    apk_id: target.apkId || null,
+    record_video: true,
+    success_url: platform === 'web' && target.successUrl.trim() ? [target.successUrl.trim()] : null,
+    success_text: target.successText.trim() ? [target.successText.trim()] : null,
+    max_steps: Number(target.maxSteps) > 0 ? Number(target.maxSteps) : null,
+  })
+  const replay = () => launch({ mode: 'replay', replay: 'golden' })
+  const stop = async () => {
+    setError(null)
+    try { await cancel() } catch (e) { setError(`Could not cancel run: ${String(e)}`) }
+  }
+  const showRun = view === 'run' && !!state.runId
+  const viewInEvidence = (id: string) => {
+    setInspect(id)
+    setTab('watch')
+    setTimeout(() => document.getElementById('watch-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
+  }
+  const progress = Math.round((state.status === 'completed' ? 1 : state.score?.goal_progress ?? 0) * 100)
+  const step = state.score?.step ?? state.frame?.step ?? 0
+
   return (
-    <div className="app-shell flex h-screen flex-col">
-      <Header
-        theme={theme} onToggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-        state={state} goal={target.goal} setGoal={goal => setTarget({ ...target, goal })} busy={busy}
-        onLive={() => launch({
-          goal: target.goal, mode: 'live', platform: target.platform ?? 'web',
-          target_url: (target.platform ?? 'web') === 'web' ? target.url.trim() || null : null,
-          device_serial: target.deviceSerial?.trim() || null,
-          android_package: target.packageName?.trim() || null,
-          android_activity: target.activity?.trim() || null,
-          apk_id: target.apkId || null,
-          record_video: true,
-          success_url: (target.platform ?? 'web') === 'web' && target.successUrl.trim() ? [target.successUrl.trim()] : null,
-          success_text: target.successText.trim() ? [target.successText.trim()] : null,
-          max_steps: Number(target.maxSteps) > 0 ? Number(target.maxSteps) : null,
-        })}
-        onCancel={async () => {
-          setError(null)
-          try { await cancel() } catch (e) { setError(`Could not cancel run: ${String(e)}`) }
-        }}
-        onReplay={() => launch({ mode: 'replay', replay: 'golden' })}
-      />
-      <TargetBar target={target} setTarget={setTarget} disabled={busy || state.status === 'running' || state.status === 'connecting'}
-        devices={devices} refreshingDevices={refreshingDevices} uploadingApk={uploadingApk}
-        onRefreshDevices={() => void refreshDevices()} onUploadApk={file => void uploadApk(file)} />
-      <ComparisonBar state={state} baselineId={baselineId} comparison={comparison} busy={comparing}
-        onSetBaseline={rememberBaseline} onCompare={compareRuns} onClear={() => setComparison(null)} />
-      {error && <div className="bg-red-600 px-5 py-1.5 text-sm text-white">PathLens error: {error}</div>}
-      {state.status === 'disconnected' && (
-        <div className="flex items-center justify-between gap-3 bg-amber-100 px-5 py-2 text-xs text-amber-900">
-          <span>{state.connectionError}</span>
-          <button className="secondary-action comparison-button" onClick={() => launch({ mode: 'replay', replay: 'golden' })}>Replay verified run</button>
-        </div>
-      )}
-      <div className="workspace-intro">
-        <div><div className="eyebrow">THE EXPERIENCE LAB</div><h1>See the journey. <span>Find the friction.</span></h1></div>
-        <div className="workspace-status"><span className={busy || state.status === 'running' || state.status === 'connecting' ? 'status-dot active' : 'status-dot'} />{busy || state.status === 'connecting' ? `Connecting to ${(target.platform ?? 'web') === 'android' ? 'Android device' : 'browser'}` : state.status === 'running' ? `Exploring ${(state.started?.platform ?? 'web') === 'android' ? 'the Android app' : 'your experience'}` : state.status === 'disconnected' ? state.connectionError : state.status === 'completed' ? 'Journey complete' : state.status === 'failed' ? 'Run needs attention' : 'Ready to explore'}</div>
-      </div>
-      <main className="dashboard-grid min-h-0 flex-1">
-        <BrowserPanel state={state} platform={target.platform ?? 'web'} inspect={inspect} clearInspect={() => setInspect(null)} />
-        <DecisionStream state={state} onReplay={() => launch({ mode: 'replay', replay: 'golden' })} />
-        <JourneyGraph state={state} onInspect={setInspect} />
-        <AccessibilityPanel state={state} platform={target.platform ?? 'web'} />
+    <div className="app-shell">
+      <AppHeader view={showRun ? 'run' : 'test'} setView={setView} hasRun={!!state.runId} state={state}
+        theme={theme} onToggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')} />
+      <main className="page" style={{ paddingBottom: 96 }}>
+        {error && <div className="banner banner-bad" role="alert">PathLens error: {error}</div>}
+
+        {!showRun && (
+          <div className="setup">
+            <div>
+              <TestSetup target={target} setTarget={setTarget} disabled={busy || running} running={running} busy={busy} starting={busy || state.status === 'connecting'}
+                devices={devices} refreshingDevices={refreshingDevices} uploadingApk={uploadingApk}
+                onRefreshDevices={() => void refreshDevices()} onUploadApk={file => void uploadApk(file)}
+                onLive={() => launch(liveBody())} onCancel={() => void stop()} onReplay={() => void replay()} />
+            </div>
+            <div className="setup-preview">
+              <BrowserFrame state={state} platform={platform} inspect={inspect} clearInspect={() => setInspect(null)} />
+            </div>
+          </div>
+        )}
+
+        {showRun && (
+          <>
+            <RunHeader key={state.runId} state={state} tab={tab} setTab={setTab} onBack={() => setView('test')} onCancel={() => void stop()} onReplay={() => void replay()} busy={busy} />
+
+            {tab === 'watch' && (
+              <>
+                <div className="workspace" id="watch-workspace">
+                  <BrowserFrame state={state} platform={platform} inspect={inspect} clearInspect={() => setInspect(null)} onInspect={setInspect} thumbnails />
+                  <div>
+                    <div className="pane-head">
+                      <span className={`badge badge-${state.status === 'completed' ? 'ok' : state.status === 'failed' ? 'bad' : 'run'}`}>
+                        <i />{state.status === 'completed' ? (state.summary?.goal_completed ? (state.summary.completion_mode === 'model_judged' ? 'Goal judged' : 'Goal reached') : 'Finished') : state.status === 'failed' ? 'Not completed' : running ? 'Exploring' : 'Stopped'}
+                      </span>
+                      <span className="fill">{state.started?.model} · {state.started?.platform === 'android' ? 'Android' : 'Web'}</span>
+                      {state.started && <span>step {step}/{state.started.max_steps} · {progress}%{state.status === 'completed' ? ' verified' : ' AI est.'}</span>}
+                    </div>
+                    <div className={`progress ${state.status === 'completed' ? 'is-done' : state.status === 'failed' ? 'is-failed' : ''}`}><i style={{ width: `${progress}%` }} /></div>
+                    <ActionTimeline state={state} onReplay={() => void replay()} />
+                  </div>
+                </div>
+                <MetricStrip state={state} />
+                <ScreenMap state={state} inspect={inspect} onInspect={id => setInspect(inspect === id ? null : id)} />
+                <FindingList state={state} onInspect={viewInEvidence} />
+              </>
+            )}
+
+            {tab === 'actions' && <div style={{ marginTop: 28 }}><ActionTimeline state={state} detailed onReplay={() => void replay()} /></div>}
+
+            {tab === 'report' && (
+              <>
+                <FindingList state={state} onInspect={viewInEvidence} />
+                <ReportPanel state={state} platform={platform} onInspect={viewInEvidence} />
+                <ComparisonBar state={state} baselineId={baselineId} comparison={comparison} busy={comparing}
+                  onSetBaseline={rememberBaseline} onCompare={compareRuns} onClear={() => setComparison(null)} />
+              </>
+            )}
+
+            {tab === 'log' && <LogView state={state} />}
+          </>
+        )}
       </main>
     </div>
   )
