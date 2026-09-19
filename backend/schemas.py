@@ -339,6 +339,26 @@ class FrictionMetrics(BaseModel):
         return min(100, raw)
 
 
+class ExperienceScore(BaseModel):
+    """Evidence-weighted user-experience grade for one trajectory.
+
+    This is intentionally not an LLM self-score. Each dimension is derived from
+    observed actions, verified findings, deterministic completion, audit coverage,
+    and recoveries. ``confidence`` describes evidence coverage, not model certainty.
+    """
+    overall: int = Field(default=0, ge=0, le=100)
+    outcome: int = Field(default=0, ge=0, le=100)
+    efficiency: int = Field(default=0, ge=0, le=100)
+    accessibility: int = Field(default=100, ge=0, le=100)
+    consistency: int = Field(default=100, ge=0, le=100)
+    resilience: int = Field(default=100, ge=0, le=100)
+    coverage: int = Field(default=0, ge=0, le=100)
+    confidence: int = Field(default=0, ge=0, le=100)
+    verdict: Literal["excellent", "good", "needs_attention", "blocked", "inconclusive"] = "inconclusive"
+    explanation: list[str] = Field(default_factory=list)
+    method: str = "evidence-weighted-v1"
+
+
 class RunMetrics(BaseModel):
     started_at: datetime = Field(default_factory=utc_now)
     finished_at: datetime | None = None
@@ -395,6 +415,7 @@ class AgentState(BaseModel):
     current_page_summary: str = ""
     current_state_id: str | None = None
     friction: FrictionMetrics = Field(default_factory=FrictionMetrics)
+    experience_score: ExperienceScore = Field(default_factory=ExperienceScore)
     metrics: RunMetrics = Field(default_factory=RunMetrics)
     run_error: str | None = None
 

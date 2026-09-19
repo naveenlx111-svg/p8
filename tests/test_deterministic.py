@@ -68,8 +68,8 @@ def test_no_conflict_when_prices_match():
 def test_accessibility_score_counts_unique_rules():
     v = lambda i, imp: AxeViolation(id=i, impact=imp, description="d", help="h")
     assert risk_score([]) == 100
-    assert risk_score([v("color-contrast", "serious"), v("label", "critical")]) == 61
-    assert risk_score([v("label", "critical"), v("label", "critical")]) == 75
+    assert risk_score([v("color-contrast", "serious"), v("label", "critical")]) == 68
+    assert risk_score([v("label", "critical"), v("label", "critical")]) == 78
     assert risk_score([v(f"r{i}", "critical") for i in range(9)]) == 0
 
 
@@ -508,3 +508,27 @@ def test_semantic_cycle_becomes_action_trace_with_alternative_path(tmp_path):
     assert finding.verified and finding.data["cycle_length"] == 2
     assert finding.data["action_trace"] == ['1. click "Open menu"', '2. back "Back"']
     assert finding.data["alternative_actions"] == ['button "Use search"']
+
+
+def test_experience_score_is_evidence_weighted_not_model_self_reported():
+    from backend.agent.scoring import compute
+    from backend.schemas import RunStatus
+
+    state = AgentState(goal=GoalSpec(raw="reach checkout"), target_url="https://example.test",
+                       status=RunStatus.COMPLETED, goal_completed=True, completion_mode="verified",
+                       accessibility_coverage="complete", accessibility_score=100)
+    state.critic_findings = [CriticFinding(category="friction", severity="high", title="AI guess",
+                                           evidence="unverified", step_number=1, source="model", verified=False)]
+    score = compute(state)
+    assert score.overall == 100 and score.verdict == "excellent"
+
+    state.friction.total_actions = 4
+    state.friction.interruptions = 1
+    state.friction.recoveries = 1
+    state.accessibility_score = 72
+    state.critic_findings.append(CriticFinding(category="semantic_inconsistency", severity="high",
+                                               title="Price changed", evidence="verified", step_number=2,
+                                               source="deterministic", verified=True))
+    degraded = compute(state)
+    assert degraded.overall < score.overall
+    assert degraded.accessibility == 72 and degraded.consistency < 100

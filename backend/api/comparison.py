@@ -61,6 +61,7 @@ def compare_runs(baseline: AgentState, candidate: AgentState) -> dict[str, Any]:
     runtime_delta = round(cand_summary["runtime_s"] - base_summary["runtime_s"], 1)
     friction_delta = candidate.friction.score() - baseline.friction.score()
     accessibility_delta = candidate.accessibility_score - baseline.accessibility_score
+    experience_delta = cand_summary["experience_score"]["overall"] - base_summary["experience_score"]["overall"]
 
     reasons: list[str] = []
     severity = "none"
@@ -84,6 +85,10 @@ def compare_runs(baseline: AgentState, candidate: AgentState) -> dict[str, Any]:
         reasons.append(f"The automated accessibility risk score fell by {abs(accessibility_delta)} points.")
         if severity == "none":
             severity = "medium"
+    if experience_delta < 0:
+        reasons.append(f"The evidence-weighted experience score fell by {abs(experience_delta)} points.")
+        if severity == "none":
+            severity = "medium"
 
     improvements: list[str] = []
     if action_delta < 0:
@@ -94,6 +99,8 @@ def compare_runs(baseline: AgentState, candidate: AgentState) -> dict[str, Any]:
         improvements.append(f"The candidate resolved {len(resolved_findings)} verified finding{'s' if len(resolved_findings) != 1 else ''}.")
     if accessibility_delta > 0:
         improvements.append(f"The automated accessibility risk score improved by {accessibility_delta} points.")
+    if experience_delta > 0:
+        improvements.append(f"The evidence-weighted experience score improved by {experience_delta} points.")
 
     verdict = "regression" if reasons else ("improvement" if improvements else "no_material_change")
     base_milestones, cand_milestones = _milestones(baseline), _milestones(candidate)
@@ -112,6 +119,7 @@ def compare_runs(baseline: AgentState, candidate: AgentState) -> dict[str, Any]:
             "runtime_s": base_summary["runtime_s"],
             "friction_score": baseline.friction.score(),
             "accessibility_score": baseline.accessibility_score,
+            "experience_score": base_summary["experience_score"]["overall"],
         },
         "candidate": {
             "run_id": candidate.run_id,
@@ -121,12 +129,14 @@ def compare_runs(baseline: AgentState, candidate: AgentState) -> dict[str, Any]:
             "runtime_s": cand_summary["runtime_s"],
             "friction_score": candidate.friction.score(),
             "accessibility_score": candidate.accessibility_score,
+            "experience_score": cand_summary["experience_score"]["overall"],
         },
         "deltas": {
             "actions": action_delta,
             "runtime_s": runtime_delta,
             "friction_score": friction_delta,
             "accessibility_score": accessibility_delta,
+            "experience_score": experience_delta,
         },
         "reasons": reasons,
         "improvements": improvements,
@@ -138,5 +148,5 @@ def compare_runs(baseline: AgentState, candidate: AgentState) -> dict[str, Any]:
             "added": sorted(cand_names - base_names),
             "missing": sorted(base_names - cand_names),
         },
-        "method": "Deterministic comparison of matched goals, semantic milestones, observed actions, friction counters and verified findings. No LLM judges the regression.",
+        "method": "Evidence-weighted comparison of matched goals, semantic milestones, observed actions, accessibility, friction and verified findings. No LLM judges the score.",
     }

@@ -14,7 +14,7 @@ from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from backend.agent import completion, critic, journey, memory, safety
+from backend.agent import completion, critic, journey, memory, safety, scoring
 from backend.agent.llm import ModelError, ReasoningModel
 from backend.agent.planner import plan
 from backend.config import settings
@@ -80,6 +80,7 @@ def _add_finding(ctx: RunContext, f: CriticFinding) -> None:
 
 def _emit_scores(ctx: RunContext, final: bool = False) -> None:
     s = ctx.state
+    experience = scoring.update(s)
     by_cat: dict[str, int] = {}
     for f in s.critic_findings:
         by_cat[f.category] = by_cat.get(f.category, 0) + 1
@@ -93,6 +94,7 @@ def _emit_scores(ctx: RunContext, final: bool = False) -> None:
         "goal_progress": s.goal_progress,
         "step": s.step_count, "max_steps": s.max_steps,
         "final": final,
+        "experience_score": experience.model_dump(mode="json"),
     })
 
 
@@ -485,6 +487,7 @@ def build_graph(ctx: RunContext):
 
 
 def summarize(state: AgentState) -> dict:
+    experience = scoring.update(state)
     cats: dict[str, int] = {}
     for f in state.critic_findings:
         if f.verified:  # unverified AI observations are reported separately, never counted as defects
@@ -507,6 +510,7 @@ def summarize(state: AgentState) -> dict:
         "accessibility_trees": sum(1 for node in state.journey_graph_nodes if node.accessibility_tree_id),
         "action_loops": sum(1 for finding in state.critic_findings
                             if finding.data.get("rule") == "semantic-action-cycle"),
+        "experience_score": experience.model_dump(mode="json"),
     }
 
 

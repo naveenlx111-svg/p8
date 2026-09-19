@@ -115,6 +115,10 @@ Key design decisions:
 - **Release intelligence is evidence-based.** `POST /api/compare` aligns semantic milestones and compares goal
   outcome, observed actions, runtime, friction counters, accessibility score and verified findings. Unverified AI
   observations never become regression evidence.
+- **The experience score is smart without being self-certified.** A single 0–100 grade combines verified outcome,
+  normalized interaction cost, accessibility findings, semantic consistency, recovery resilience and audit coverage.
+  The dashboard exposes each dimension and an evidence-confidence indicator; the model may explain a screen, but it
+  never gets to choose its own score.
 
 ## Repository layout
 

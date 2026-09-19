@@ -7,13 +7,14 @@ import { FindingList } from './components/FindingList'
 import { LogView } from './components/LogView'
 import { MetricStrip } from './components/MetricStrip'
 import { ReportPanel } from './components/ReportPanel'
+import { RunHistory } from './components/RunHistory'
 import { RunHeader, type Tab } from './components/RunHeader'
 import { ScreenMap } from './components/ScreenMap'
 import { TestSetup, type AndroidDevice } from './components/TestSetup'
 import { isLive } from './lib'
 import { PRESETS, type Target } from './presets'
 import { useRun } from './useRun'
-import type { RunComparison } from './types'
+import type { RunComparison, RunHistoryItem } from './types'
 
 
 export default function App() {
@@ -43,8 +44,19 @@ export default function App() {
   const [devices, setDevices] = useState<AndroidDevice[]>([])
   const [refreshingDevices, setRefreshingDevices] = useState(false)
   const [uploadingApk, setUploadingApk] = useState(false)
+  const [history, setHistory] = useState<RunHistoryItem[]>([])
 
   const backend = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '')
+  const refreshHistory = async () => {
+    try {
+      const response = await fetch(`${backend}/api/runs`)
+      if (response.ok) setHistory(await response.json())
+    } catch { /* History is a convenience layer; the active run remains usable. */ }
+  }
+  useEffect(() => { void refreshHistory() }, [])
+  useEffect(() => {
+    if (state.status === 'completed' || state.status === 'failed') void refreshHistory()
+  }, [state.status])
   const refreshDevices = async () => {
     setRefreshingDevices(true)
     setError(null)
@@ -172,6 +184,8 @@ export default function App() {
             <div className="setup-preview">
               <BrowserFrame state={state} platform={platform} inspect={inspect} clearInspect={() => setInspect(null)} />
             </div>
+            <RunHistory runs={history} currentId={state.runId} baselineId={baselineId} onRefresh={() => void refreshHistory()}
+              onUseAsBaseline={id => { setBaselineId(id); setComparison(null); try { localStorage.setItem('pathlens-baseline-run', id) } catch {} }} />
           </div>
         )}
 
@@ -209,6 +223,8 @@ export default function App() {
                 <ReportPanel state={state} platform={platform} onInspect={viewInEvidence} />
                 <ComparisonBar state={state} baselineId={baselineId} comparison={comparison} busy={comparing}
                   onSetBaseline={rememberBaseline} onCompare={compareRuns} onClear={() => setComparison(null)} />
+                <RunHistory runs={history} currentId={state.runId} baselineId={baselineId} onRefresh={() => void refreshHistory()}
+                  onUseAsBaseline={id => { setBaselineId(id); setComparison(null); try { localStorage.setItem('pathlens-baseline-run', id) } catch {} }} />
               </>
             )}
 

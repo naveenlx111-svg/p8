@@ -96,6 +96,7 @@ def render_report(state: AgentState, run_dir: Path) -> str:
         finding_html.append(f"<h2>{title}</h2>{''.join(cards)}")
 
     fr = state.friction
+    experience = s["experience_score"]
     accessibility_method = (
         "Captured Android UIAutomator accessibility hierarchy plus deterministic accessible-name and 48dp touch-target checks."
         if state.platform == "android" else
@@ -144,6 +145,11 @@ Model {escape(state.provider)}/{escape(state.model)}{' (OFFLINE TEST DOUBLE, not
 <p class="meta">Accessibility coverage: {escape(state.accessibility_coverage)}. The score covers only successfully audited states; partial or failed coverage is not a clean audit.</p>
 <p class="meta">{tree_count} state-linked accessibility tree artifact{'s' if tree_count != 1 else ''} captured.</p>
 {video_html}
+<h2>Evidence-weighted experience score</h2>
+<p><span class="status" style="background:#175cd3">{experience['overall']}/100 · {escape(experience['verdict'].replace('_', ' ').upper())}</span>
+Outcome {experience['outcome']} · efficiency {experience['efficiency']} · accessibility {experience['accessibility']} ·
+consistency {experience['consistency']} · resilience {experience['resilience']} · evidence confidence {experience['confidence']}.</p>
+<ul>{''.join(f'<li>{escape(item)}</li>' for item in experience['explanation'])}</ul>
 <p>{state.step_count} actions in {s['runtime_s']}s · {s['model_calls']} model calls (p50 {s['model_latency_p50_ms']} ms) ·
 friction events: {fr.interruptions} interruption, {fr.blocked_interactions} blocked, {fr.failed_interactions} failed,
 {fr.repeated_states} repeated state, {fr.backtracks} backtracks, {fr.no_progress_actions} no-progress actions

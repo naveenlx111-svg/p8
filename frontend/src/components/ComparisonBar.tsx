@@ -38,6 +38,7 @@ export function ComparisonBar({ state, baselineId, comparison, busy, onSetBaseli
               <span><b>{signed(comparison.deltas.runtime_s, ' s')}</b> time</span>
               <span><b>{signed(comparison.deltas.friction_score)}</b> friction</span>
               <span><b>{signed(comparison.deltas.accessibility_score)}</b> accessibility</span>
+              <span><b>{signed(comparison.deltas.experience_score)}</b> experience</span>
               <span><b>{comparison.new_findings.length}</b> new verified</span>
               <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={onClear}>Close</button>
             </div>

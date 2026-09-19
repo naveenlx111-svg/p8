@@ -126,6 +126,21 @@ export interface ScoreUpdate {
   step: number
   max_steps: number
   final: boolean
+  experience_score: ExperienceScore
+}
+
+export interface ExperienceScore {
+  overall: number
+  outcome: number
+  efficiency: number
+  accessibility: number
+  consistency: number
+  resilience: number
+  coverage: number
+  confidence: number
+  verdict: 'excellent' | 'good' | 'needs_attention' | 'blocked' | 'inconclusive'
+  explanation: string[]
+  method: string
 }
 
 export interface RunSummary {
@@ -147,15 +162,32 @@ export interface RunSummary {
   video_url?: string
   accessibility_trees?: number
   action_loops?: number
+  experience_score?: ExperienceScore
+}
+
+export interface RunHistoryItem {
+  run_id: string
+  goal: string
+  status: string
+  steps: number
+  provider: string
+  model: string
+  platform: 'web' | 'android'
+  target_url?: string | null
+  goal_completed?: boolean
+  accessibility_score?: number
+  experience_score?: number | null
+  runtime_s?: number | null
+  updated_at?: string | null
 }
 
 export interface RunComparison {
   verdict: 'regression' | 'improvement' | 'no_material_change'
   severity: 'none' | 'medium' | 'high' | 'critical'
   comparable_goal: boolean
-  baseline: { run_id: string; target_url: string; goal_completed: boolean; actions: number; runtime_s: number; friction_score: number; accessibility_score: number }
-  candidate: { run_id: string; target_url: string; goal_completed: boolean; actions: number; runtime_s: number; friction_score: number; accessibility_score: number }
-  deltas: { actions: number; runtime_s: number; friction_score: number; accessibility_score: number }
+  baseline: { run_id: string; target_url: string; goal_completed: boolean; actions: number; runtime_s: number; friction_score: number; accessibility_score: number; experience_score: number }
+  candidate: { run_id: string; target_url: string; goal_completed: boolean; actions: number; runtime_s: number; friction_score: number; accessibility_score: number; experience_score: number }
+  deltas: { actions: number; runtime_s: number; friction_score: number; accessibility_score: number; experience_score: number }
   reasons: string[]
   improvements: string[]
   new_findings: Finding[]

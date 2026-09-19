@@ -17,11 +17,24 @@ export function ReportPanel({ state, platform, onInspect }: { state: RunState; p
     ? 'UIAutomator hierarchy + deterministic accessible-name and 48dp touch-target checks.'
     : 'Browser accessibility snapshot + axe-core rules + keyboard focus traversal for dialogs.'
   const nFindings = (id: string) => state.findings.filter(f => f.state_id === id).length
+  const experience = state.summary?.experience_score
+  const loopFindings = state.findings.filter(f => f.data?.rule === 'semantic-action-cycle')
 
   return (
     <>
       <div className="report-grid">
         <section>
+          {experience && (
+            <>
+              <div className="subhead">Evidence-weighted experience score</div>
+              <div className={`score ${experience.overall >= 80 ? 'good' : experience.overall >= 60 ? 'warning' : 'poor'}`}>{experience.overall}<small>/100</small></div>
+              <p className="fineprint"><b>{experience.verdict.replaceAll('_', ' ')}</b> · {experience.method}</p>
+              <div className="score-breakdown">
+                {([['outcome', experience.outcome], ['efficiency', experience.efficiency], ['accessibility', experience.accessibility], ['consistency', experience.consistency], ['resilience', experience.resilience], ['coverage', experience.coverage]] as const).map(([label, value]) => <span key={label}><b>{value}</b><small>{label}</small></span>)}
+              </div>
+              <ul className="rows">{experience.explanation.map((item, i) => <li key={i}>{item}</li>)}</ul>
+            </>
+          )}
           <div className="subhead">{sc ? 'Accessibility score' : 'Awaiting first audit'}</div>
           <div className={`score ${tone}`} key={score}>{sc ? score : '—'}<small>/100</small></div>
           <div className="counts">
@@ -61,6 +74,17 @@ export function ReportPanel({ state, platform, onInspect }: { state: RunState; p
                     {f.data.accessibility_tree_id && <a href={`${base}${f.data.accessibility_tree_id}`} target="_blank" rel="noreferrer">Open captured accessibility tree</a>}
                   </li>
                 ))}
+              </ul>
+            </>
+          )}
+          {loopFindings.length > 0 && (
+            <>
+              <div className="subhead">Journey loop and alternate paths</div>
+              <ul className="rows">
+                {loopFindings.map(f => <li key={f.finding_id} style={{ flexDirection: 'column', gap: 4 }}>
+                  <b>{f.title}</b><span className="muted">{f.data.action_trace?.join(' → ')}</span>
+                  {f.data.alternative_actions?.length > 0 && <span><b>Available exits:</b> {f.data.alternative_actions.join(' · ')}</span>}
+                </li>)}
               </ul>
             </>
           )}

@@ -208,7 +208,13 @@ def list_runs() -> list[dict]:
             data = json.loads(st.read_text())
             out.append({"run_id": data["run_id"], "goal": data["goal"]["raw"], "status": data["status"],
                         "steps": data["step_count"], "provider": data["provider"], "model": data["model"],
-                        "platform": data.get("platform", "web")})
+                        "platform": data.get("platform", "web"),
+                        "target_url": data.get("target_url"),
+                        "goal_completed": data.get("goal_completed", False),
+                        "accessibility_score": data.get("accessibility_score", 100),
+                        "experience_score": (data.get("experience_score") or {}).get("overall"),
+                        "runtime_s": data.get("runtime_s"),
+                        "updated_at": data.get("updated_at") or data.get("finished_at")})
     return out
 
 

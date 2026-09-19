@@ -1,6 +1,8 @@
 """Deterministic accessibility auditing with locally vendored axe-core, plus the risk-score heuristic."""
 from __future__ import annotations
 
+import math
+
 from playwright.async_api import Page
 
 from backend.schemas import AxeViolation
@@ -37,9 +39,21 @@ async def run_axe(page: Page, final: bool = False) -> list[AxeViolation]:
 
 
 def risk_score(violations: list[AxeViolation]) -> int:
-    """100 - weighted count of UNIQUE violated rules (not affected nodes)."""
+    """Return a bounded, severity-weighted accessibility score.
+
+    Count each violated rule once, but use a saturating curve so a noisy
+    production page does not collapse to ``0/100`` after a handful of rules.
+    A very broad critical audit remains a genuine zero.
+    """
     unique = {v.id: v.impact for v in violations}
-    return max(0, 100 - sum(IMPACT_WEIGHTS.get(impact or "minor", 2) for impact in unique.values()))
+    if not unique:
+        return 100
+    raw_penalty = sum(IMPACT_WEIGHTS.get(impact or "minor", 2) for impact in unique.values())
+    critical_count = sum(1 for impact in unique.values() if impact == "critical")
+    if critical_count >= 9:
+        return 0
+    penalty = 100 * (1 - math.exp(-raw_penalty / 100))
+    return max(1, min(100, round(100 - penalty)))
 
 
 def impact_counts(violations: list[AxeViolation]) -> dict[str, int]:
