@@ -298,6 +298,8 @@ class AndroidSession:
         self._raw_nodes: list[dict[str, str]] = []
         self._recording: asyncio.subprocess.Process | None = None
         self._remote_video = f"/sdcard/pathlens_{short_id()}.mp4"
+        self._frame_task: asyncio.Task | None = None
+        self._frame_stop = asyncio.Event()
         self.video_name: str | None = None
         self.density = 1.0
 
@@ -316,6 +318,18 @@ class AndroidSession:
             raise AndroidError("no authorised Android device/emulator is connected; run `adb devices`")
         else:
             raise AndroidError("multiple Android devices are connected; select a device serial")
+
+        # Wake the display and dismiss only a non-secure keyguard. Never attempt to
+        # bypass a PIN/pattern/biometric boundary on a tester's physical phone.
+        await _command(*self._adb("shell", "input", "keyevent", "224"), timeout=10, check=False)
+        await _command(*self._adb("shell", "wm", "dismiss-keyguard"), timeout=10, check=False)
+        await asyncio.sleep(0.35)
+        policy, _ = await _command(*self._adb("shell", "dumpsys", "window", "policy"), timeout=15, check=False)
+        policy_text = policy.decode("utf-8", "replace")
+        if re.search(r"(?:mIsShowing|\bshowing)=true", policy_text):
+            raise AndroidError(
+                f'Android device "{self.serial}" is locked. Unlock it and keep the screen awake before starting a run.'
+            )
 
         if self.apk_path:
             await _command(*self._adb("install", "-r", self.apk_path), timeout=180)
@@ -340,6 +354,26 @@ class AndroidSession:
                 *self._adb("shell", "screenrecord", "--time-limit", "180", self._remote_video),
                 stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
             )
+            await asyncio.sleep(0.25)
+            if self._recording.returncode is not None:
+                # Some OEM builds transition screenrecord into a restricted SELinux
+                # domain that cannot create its output file. Preserve video evidence
+                # with generic host-side screencap sampling instead.
+                self._frame_task = asyncio.create_task(self._capture_video_frames())
+
+    async def _capture_video_frames(self) -> None:
+        frame_dir = self.run_dir / "video_frames"
+        frame_dir.mkdir(parents=True, exist_ok=True)
+        frame = 0
+        while not self._frame_stop.is_set():
+            image, _ = await _command(*self._adb("exec-out", "screencap", "-p"), timeout=15, check=False)
+            if image.startswith(b"\x89PNG"):
+                frame += 1
+                (frame_dir / f"frame_{frame:05d}.png").write_bytes(image)
+            try:
+                await asyncio.wait_for(self._frame_stop.wait(), timeout=0.5)
+            except TimeoutError:
+                pass
 
     async def _focused_activity(self) -> tuple[str, str]:
         stdout, _ = await _command(*self._adb("shell", "dumpsys", "window", "windows"), timeout=12, check=False)
@@ -347,6 +381,13 @@ class AndroidSession:
         match = re.search(r"mCurrentFocus=.*?\s([A-Za-z0-9_.$-]+)/([A-Za-z0-9_.$-]+)", text)
         if not match:
             match = re.search(r"mFocusedApp=.*?\s([A-Za-z0-9_.$-]+)/([A-Za-z0-9_.$-]+)", text)
+        if not match:
+            stdout, _ = await _command(*self._adb("shell", "dumpsys", "activity", "activities"), timeout=15, check=False)
+            text = stdout.decode("utf-8", "replace")
+            match = re.search(
+                r"(?:topResumedActivity|mResumedActivity|ResumedActivity).*?\s([A-Za-z0-9_.$-]+)/([A-Za-z0-9_.$-]+)",
+                text,
+            )
         return (match.group(1), match.group(2)) if match else (self.package, self.activity)
 
     async def observe(self) -> Observation:
@@ -480,6 +521,12 @@ class AndroidSession:
         ]
 
     async def close(self) -> None:
+        self._frame_stop.set()
+        if self._frame_task:
+            try:
+                await asyncio.wait_for(self._frame_task, timeout=18)
+            except Exception:
+                self._frame_task.cancel()
         if self._recording:
             if self._recording.returncode is None:
                 try:
@@ -496,3 +543,22 @@ class AndroidSession:
             except Exception:
                 pass
             await _command(*self._adb("shell", "rm", self._remote_video), timeout=10, check=False)
+        if not self.video_name:
+            frame_dir = self.run_dir / "video_frames"
+            frames = sorted(frame_dir.glob("frame_*.png")) if frame_dir.is_dir() else []
+            ffmpeg = shutil.which("ffmpeg")
+            if ffmpeg and frames:
+                local = self.run_dir / "journey.mp4"
+                try:
+                    await _command(
+                        ffmpeg, "-y", "-loglevel", "error", "-framerate", "2",
+                        "-i", str(frame_dir / "frame_%05d.png"),
+                        "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+                        "-c:v", "libx264", "-pix_fmt", "yuv420p", str(local), timeout=120,
+                    )
+                    if local.exists() and local.stat().st_size:
+                        self.video_name = local.name
+                except Exception:
+                    pass
+            if frame_dir.is_dir():
+                shutil.rmtree(frame_dir, ignore_errors=True)

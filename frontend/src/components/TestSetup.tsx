@@ -1,4 +1,4 @@
-import { PRESETS, type Target } from '../presets'
+import { ANDROID_PRESETS, PRESETS, type Target } from '../presets'
 
 export interface AndroidDevice {
   serial: string
@@ -94,6 +94,16 @@ export function TestSetup(p: Props) {
               </label>
             </div>
           </div>
+          <label className="field">
+            <span>Android demo apps</span>
+            <select className="input" aria-label="Android demo apps" disabled={disabled} value="" onChange={e => {
+              const preset = ANDROID_PRESETS[Number(e.target.value)]
+              if (preset) setTarget({ ...preset.t, deviceSerial: target.deviceSerial })
+            }}>
+              <option value="">Choose a demo…</option>
+              {ANDROID_PRESETS.map((preset, i) => <option key={preset.name} value={i}>{preset.name}</option>)}
+            </select>
+          </label>
           <label className="field">
             <span>Done when screen shows</span>
             <input className="input" aria-label="Success text" value={target.successText} onChange={set('successText')} disabled={disabled} placeholder="required" />
