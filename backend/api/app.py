@@ -10,7 +10,7 @@ import re
 import shutil
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -18,9 +18,11 @@ from pydantic import BaseModel
 
 from backend.agent.runner import new_state, run_live
 from backend.api.health import health_report
+from backend.api.comparison import compare_runs
 from backend.api.report import render_report
 from backend.config import ROOT, settings
 from backend.events import EventBus, load_events
+from backend.runtime.android import AndroidError, apk_package, list_devices
 from backend.schemas import AgentState, short_id
 
 app = FastAPI(title="PathLens")
@@ -28,11 +30,12 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 settings.artifacts_dir.mkdir(parents=True, exist_ok=True)
 settings.replay_dir.mkdir(parents=True, exist_ok=True)
+settings.upload_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/artifacts", StaticFiles(directory=settings.artifacts_dir), name="artifacts")
 app.mount("/replay_runs", StaticFiles(directory=settings.replay_dir), name="replay_runs")
 
 BUSES: dict[str, EventBus] = {}
-TASKS: set[asyncio.Task] = set()
+TASKS: dict[str, asyncio.Task] = {}
 
 _SAFE_NAME = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
@@ -59,12 +62,70 @@ class RunRequest(BaseModel):
     success_url: list[str] | None = None
     success_text: list[str] | None = None
     max_steps: int | None = None
+    platform: str = "web"
+    device_serial: str | None = None
+    android_package: str | None = None
+    android_activity: str | None = None
+    apk_id: str | None = None
+    record_video: bool = True
 
 
-def _spawn(coro) -> None:
+class CompareRequest(BaseModel):
+    baseline_run: str
+    candidate_run: str
+
+
+def _spawn(run_id: str, coro) -> None:
     task = asyncio.create_task(coro)
-    TASKS.add(task)
-    task.add_done_callback(TASKS.discard)
+    TASKS[run_id] = task
+    task.add_done_callback(lambda _task: TASKS.pop(run_id, None))
+
+
+def _apk_path(apk_id: str) -> Path:
+    if not _SAFE_NAME.match(apk_id):
+        raise HTTPException(400, "invalid apk_id")
+    base = settings.upload_dir.resolve()
+    path = (base / f"{apk_id}.apk").resolve()
+    if path.parent != base or not path.is_file():
+        raise HTTPException(404, "uploaded APK not found")
+    return path
+
+
+@app.get("/api/android/devices")
+async def android_devices() -> dict:
+    try:
+        devices = await list_devices()
+    except AndroidError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    return {"devices": [device.model_dump() for device in devices],
+            "ready": any(device.status == "device" for device in devices)}
+
+
+@app.post("/api/android/apks")
+async def upload_apk(file: UploadFile = File(...)) -> dict:
+    if not (file.filename or "").lower().endswith(".apk"):
+        raise HTTPException(400, "choose an .apk file")
+    apk_id = short_id()
+    destination = settings.upload_dir / f"{apk_id}.apk"
+    size = 0
+    with destination.open("wb") as output:
+        while chunk := await file.read(1024 * 1024):
+            size += len(chunk)
+            if size > 250 * 1024 * 1024:
+                output.close()
+                destination.unlink(missing_ok=True)
+                raise HTTPException(413, "APK exceeds the 250 MB demo limit")
+            output.write(chunk)
+    try:
+        with destination.open("rb") as uploaded:
+            signature = uploaded.read(2)
+        if signature != b"PK":
+            raise AndroidError("the upload is not an APK/ZIP file")
+        package = await apk_package(destination)
+    except AndroidError as exc:
+        destination.unlink(missing_ok=True)
+        raise HTTPException(400, str(exc)) from exc
+    return {"apk_id": apk_id, "filename": file.filename, "package": package, "size": size}
 
 
 async def _replay(bus: EventBus, name: str, speed: float) -> None:
@@ -92,17 +153,35 @@ async def create_run(req: RunRequest) -> dict:
         run_id = "replay_" + short_id()
         bus = EventBus(run_id, settings.artifacts_dir, record=False)
         BUSES[run_id] = bus
-        _spawn(_replay(bus, req.replay, req.speed))
+        _spawn(run_id, _replay(bus, req.replay, req.speed))
         return {"run_id": run_id, "mode": "replay"}
-    if req.target_url and not req.target_url.lower().startswith(("http://", "https://")):
+    if req.platform not in ("web", "android"):
+        raise HTTPException(400, "platform must be web or android")
+    if req.platform == "web" and req.target_url and not req.target_url.lower().startswith(("http://", "https://")):
         raise HTTPException(400, "target_url must start with http:// or https://")
     if not req.goal.strip():
         raise HTTPException(400, "goal must not be empty")
+    apk_path = None
+    android_package = req.android_package
+    if req.platform == "android":
+        if req.apk_id:
+            apk_path = _apk_path(req.apk_id)
+            if not android_package:
+                try:
+                    android_package = await apk_package(apk_path)
+                except AndroidError as exc:
+                    raise HTTPException(400, str(exc)) from exc
+        if not android_package:
+            raise HTTPException(400, "Android runs need an uploaded APK or installed package name")
+        if not req.success_text or not any(text.strip() for text in req.success_text):
+            raise HTTPException(400, "Android runs need deterministic 'Done when screen shows' text")
     state = new_state(req.goal, req.target_url, success_url=req.success_url, success_text=req.success_text,
-                      max_steps=req.max_steps)
+                      max_steps=req.max_steps, platform=req.platform, device_serial=req.device_serial,
+                      android_package=android_package, android_activity=req.android_activity,
+                      apk_path=str(apk_path) if apk_path else None, record_video=req.record_video)
     bus = EventBus(state.run_id, settings.artifacts_dir / f"run_{state.run_id}")
     BUSES[state.run_id] = bus
-    _spawn(run_live(state, bus))
+    _spawn(state.run_id, run_live(state, bus))
     return {"run_id": state.run_id, "mode": "live"}
 
 
@@ -113,6 +192,13 @@ def _run_dir(run_id: str) -> Path:
     return d
 
 
+def _load_completed_state(run_id: str) -> AgentState:
+    state_path = _run_dir(run_id) / "state.json"
+    if not state_path.exists():
+        raise HTTPException(409, f"run {run_id} is still in progress")
+    return AgentState.model_validate_json(state_path.read_text(encoding="utf-8"))
+
+
 @app.get("/api/runs")
 def list_runs() -> list[dict]:
     out = []
@@ -121,8 +207,16 @@ def list_runs() -> list[dict]:
         if st.exists():
             data = json.loads(st.read_text())
             out.append({"run_id": data["run_id"], "goal": data["goal"]["raw"], "status": data["status"],
-                        "steps": data["step_count"], "provider": data["provider"], "model": data["model"]})
+                        "steps": data["step_count"], "provider": data["provider"], "model": data["model"],
+                        "platform": data.get("platform", "web")})
     return out
+
+
+@app.post("/api/compare")
+def compare(req: CompareRequest) -> dict:
+    if req.baseline_run == req.candidate_run:
+        raise HTTPException(400, "baseline and candidate must be different runs")
+    return compare_runs(_load_completed_state(req.baseline_run), _load_completed_state(req.candidate_run))
 
 
 @app.get("/api/runs/{run_id}/events")
@@ -137,11 +231,30 @@ def run_report(run_id: str, download: bool = False):
     d = _run_dir(run_id)
     path = d / "report.html"
     if not path.exists():
-        state = AgentState.model_validate_json((d / "state.json").read_text())
+        state_path = d / "state.json"
+        if not state_path.exists():
+            raise HTTPException(409, "run is still in progress; report will be available after finalization")
+        state = AgentState.model_validate_json(state_path.read_text(encoding="utf-8"))
         path.write_text(render_report(state, d), encoding="utf-8")
     if download:
         return FileResponse(path, filename=f"audit-{run_id}.html", media_type="text/html")
     return HTMLResponse(path.read_text(encoding="utf-8"))
+
+
+@app.delete("/api/runs/{run_id}")
+async def cancel_run(run_id: str) -> dict:
+    task = TASKS.get(run_id)
+    if task is None:
+        if (settings.artifacts_dir / f"run_{run_id}" / "state.json").exists():
+            raise HTTPException(409, "run has already finished")
+        raise HTTPException(404, "active run not found")
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        # Defensive only: run_live currently consumes cancellation after recording final artifacts.
+        pass
+    return {"run_id": run_id, "cancelled": True}
 
 
 @app.post("/api/runs/{run_id}/save-replay")

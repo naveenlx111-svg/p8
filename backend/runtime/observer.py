@@ -63,6 +63,8 @@ COLLECT_JS = r"""
   // (Sites use role=dialog for permanent layout panels, e.g. filter sidebars; those are not interruptions.)
   const blocking = (d) => {
     if (d.getAttribute('aria-modal') === 'true') return true;
+    // A panel that explicitly declares itself non-modal (e.g. an "added to cart" side panel) does not block the page.
+    if (d.getAttribute('aria-modal') === 'false') return false;
     try { if (d.matches(':modal')) return true; } catch (e) {}
     const cs = getComputedStyle(d), r = d.getBoundingClientRect();
     const w = Math.max(0, Math.min(r.right, innerWidth) - Math.max(r.left, 0));
@@ -123,6 +125,9 @@ COLLECT_JS = r"""
       visibility: dist(el) === 0 ? 'visible' : 'offscreen',
       checked: (el.type === 'checkbox' || el.type === 'radio' || el.getAttribute('role') === 'switch') ? !!el.checked : null,
       selected: el.tagName === 'SELECT' ? el.selectedIndex >= 0 : null,
+      focused: document.activeElement === el,
+      form_submit_labels: el.form ? [...el.form.querySelectorAll('button[type="submit"],input[type="submit"],button:not([type])')]
+        .map(accName).filter(Boolean).slice(0, 5) : [],
       bbox: { x: r.x, y: r.y, width: r.width, height: r.height },
     });
   }
@@ -206,6 +211,7 @@ async def observe(page: Page, max_elements: int = 40, focus_words: list[str] | N
             element_id=idx, role=info["role"], name=name, tag=info["tag"], input_type=info["input_type"],
             placeholder=info["placeholder"], value=info["value"], disabled=info["disabled"],
             in_dialog=info["in_dialog"], covered=info["covered"], bbox=info["bbox"],
+            focused=info.get("focused", False), form_submit_labels=info.get("form_submit_labels", []),
             visibility=info["visibility"], checked=info["checked"], selected=info["selected"],
         )
         registry.handles[idx] = el_handle

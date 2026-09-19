@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 
 from backend.agent.memory import normalize_entity
 from backend.schemas import GoalSpec, Observation, PageFact
@@ -19,20 +20,56 @@ def _norm(text: str) -> str:
 
 
 def _path_only(route: str) -> str:
-    """The route without its query string, so a query PARAMETER VALUE (e.g. "?q=checkout") cannot
-    masquerade as having reached a destination route."""
-    return route.split("?", 1)[0]
+    """Remove path and fragment queries while preserving a hash route.
+
+    `/?release=candidate#/checkout?ref=x` becomes `/#/checkout`; a simple split
+    at the first question mark would incorrectly discard the real destination.
+    """
+    path, marker, fragment = route.partition("#")
+    clean = path.split("?", 1)[0]
+    if marker:
+        clean += "#" + fragment.split("?", 1)[0]
+    return clean
+
+
+def _route_contains(route: str, expected: str) -> bool:
+    """Match complete path/hash segments, not arbitrary substrings.
+
+    A `cart` criterion therefore matches `/#/cart` and `/cart/checkout`, but not
+    `/cart-rules` or `/cart-item/3`.
+    """
+    actual = _path_only(route.lower())
+    wanted = expected.lower().split("?", 1)[0].strip("/#")
+    if not wanted:
+        return False
+    if "/" in wanted:
+        return re.search(rf"(?:^|[/#]){re.escape(wanted)}(?:$|[/#])", actual) is not None
+
+    # Recognize conventional multi-step workflow routes without returning to
+    # arbitrary substring matching. Examples: checkout-step-one.html,
+    # signup_review, order-complete. Unrelated checkout-rules/cart-item remain false.
+    workflow_suffixes = ("step", "review", "overview", "complete", "confirmation", "information", "details")
+    segments = [re.sub(r"\.(?:html?|php|aspx?|jsp)$", "", s) for s in re.split(r"[/#]", actual) if s]
+    for segment in segments:
+        if segment == wanted:
+            return True
+        if segment.startswith(wanted + "-") or segment.startswith(wanted + "_"):
+            suffix = segment[len(wanted) + 1:]
+            if any(suffix == word or suffix.startswith(word + "-") or suffix.startswith(word + "_")
+                   for word in workflow_suffixes):
+                return True
+    return False
 
 
 def cart_shows(obs: Observation, product: str) -> bool:
     """Deterministic: the product name is visible on a cart screen (plain text match, no model involved)."""
-    return "cart" in obs.route.lower() and _norm(product) in _norm(obs.visible_text)
+    return _route_contains(obs.route, "cart") and _norm(product) in _norm(obs.visible_text)
 
 
 def update_cart_seen(current: bool, obs: Observation, product: str) -> bool:
     """Reflects the MOST RECENT cart-route observation, never a historical "ever seen" flag: if the item
     is later removed and the cart is revisited, that must invalidate a prior sighting."""
-    if obs.dialog_open or "cart" not in obs.route.lower():
+    if obs.dialog_open or not _route_contains(obs.route, "cart"):
         return current  # not a cart observation right now: carry the last known cart state forward
     return cart_shows(obs, product)
 
@@ -60,11 +97,11 @@ def verify(goal: GoalSpec, obs: Observation, facts: list[PageFact] | None = None
 
     route = _path_only(obs.route.lower())
     if crit.url_contains:
-        hit = next((u for u in crit.url_contains if u in route), None)
+        hit = next((u for u in crit.url_contains if _route_contains(route, u)), None)
         (evidence if hit else missing).append(f'route contains "{hit or "|".join(crit.url_contains)}"')
 
     if crit.forbid_url_contains:
-        hit = next((u for u in crit.forbid_url_contains if u in route), None)
+        hit = next((u for u in crit.forbid_url_contains if _route_contains(route, u)), None)
         if hit:
             missing.append(f'route still contains "{hit}"')
         else:
@@ -103,7 +140,8 @@ def verify(goal: GoalSpec, obs: Observation, facts: list[PageFact] | None = None
             evidence.append(ok)
         elif bad:
             missing.append(bad)
-        # else: unknown - neither blocks nor proves completion
+        else:
+            missing.append(f'no verified price observed for "{crit.price_entity}"')
 
     text_now = obs.visible_text.lower()
     contradiction = next((t for t in crit.forbid_text_any if t in text_now), None)

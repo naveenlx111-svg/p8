@@ -89,6 +89,21 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
 .target-bar input, .target-bar select { background: var(--inset); border-color: var(--line); color: var(--text); font-size: 12px; font-weight: 500; border-radius: 7px; }
 input::placeholder { color: var(--muted); opacity: 1; }
 .target-examples { margin-left: auto; max-width: 240px; }
+.comparison-bar { min-height: 48px; flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding: 7px 20px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--accent-soft) 42%, var(--surface)); font-size: 11px; }
+.comparison-title { display: flex; align-items: center; gap: 9px; min-width: 230px; }
+.comparison-title b { display: block; color: var(--text); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+.comparison-title small { display: block; color: var(--muted); margin-top: 1px; }
+.comparison-icon { display: grid; place-items: center; width: 29px; height: 29px; border-radius: 8px; background: var(--surface); color: var(--accent-text); border: 1px solid var(--line); font-size: 17px; font-weight: 700; }
+.comparison-baseline { color: var(--muted); margin-left: auto; font-family: ui-monospace, monospace; }
+.comparison-button { height: 31px; padding: 0 11px; font-size: 11px; }
+.comparison-button:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; transform: none; }
+.comparison-verdict { border-radius: 6px; padding: 5px 9px; font-weight: 800; letter-spacing: .07em; color: var(--danger); background: var(--danger-bg); }
+.comparison-improvement .comparison-verdict { color: var(--success); background: var(--success-bg); }
+.comparison-no_material_change .comparison-verdict { color: var(--info); background: var(--info-bg); }
+.comparison-deltas { display: flex; align-items: center; gap: 5px; }
+.comparison-deltas span { padding: 4px 7px; border-radius: 5px; background: var(--surface); color: var(--muted); border: 1px solid var(--line); white-space: nowrap; }
+.comparison-deltas b { color: var(--text); }
+.comparison-reason { flex: 1; min-width: 140px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-intro { display: flex; justify-content: space-between; align-items: center; padding: 14px 22px 12px; gap: 16px; flex-shrink: 0; }
 .eyebrow { color: var(--muted); font-size: 9px; letter-spacing: .2em; font-weight: 700; margin-bottom: 7px; }
 h1 { font-size: clamp(20px, 2vw, 29px); font-weight: 600; letter-spacing: -1px; line-height: 1.3; }
@@ -173,6 +188,8 @@ h1 span { color: var(--muted); font-weight: 400; }
   .target-bar label { flex: 1; flex-direction: column; align-items: stretch; }
   .target-bar label input { width: 100%; }
   .target-examples { align-self: end; }
+  .comparison-title small, .comparison-reason { display: none; }
+  .comparison-title { min-width: auto; }
 }
 /* Compact the decorative content on laptop-height screens, keeping controls readable. */
 @media (min-width: 761px) and (max-height: 850px) {
@@ -204,6 +221,9 @@ h1 span { color: var(--muted); font-weight: 400; }
   .target-bar { display: grid; grid-template-columns: 1fr 1fr; padding: 14px 16px; }
   .target-bar label:first-child { grid-column: 1 / -1; }
   .target-examples { grid-column: 1 / -1; max-width: none; width: 100%; }
+  .comparison-bar { flex-wrap: wrap; padding: 10px 16px; }
+  .comparison-baseline { margin-left: 0; }
+  .comparison-deltas { width: 100%; overflow-x: auto; }
   .workspace-intro { padding: 23px 16px 18px; align-items: flex-start; flex-direction: column; gap: 12px; }
   h1 { font-size: 23px; }
   .dashboard-grid { display: flex; flex-direction: column; padding: 0 16px 25px; gap: 16px; overflow: visible; }

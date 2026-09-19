@@ -102,6 +102,8 @@ class ObservedElement(BaseModel):
     visibility: Literal["visible", "offscreen"] = "visible"
     checked: bool | None = None
     selected: bool | None = None
+    focused: bool = False
+    form_submit_labels: list[str] = Field(default_factory=list)
     bbox: dict[str, float] | None = None
 
     def describe(self) -> str:
@@ -112,7 +114,10 @@ class ObservedElement(BaseModel):
         if self.placeholder:
             bits.append(f'placeholder="{self.placeholder}"')
         if self.value:
-            bits.append(f'value="{self.value}"')
+            if self.input_type == "password":
+                bits.append("value=(already filled; secret hidden)")
+            else:
+                bits.append(f'value="{self.value}"')
         if self.disabled:
             bits.append("disabled")
         if self.in_dialog:
@@ -120,11 +125,13 @@ class ObservedElement(BaseModel):
         if self.covered:
             bits.append("(covered by overlay)")
         if self.visibility == "offscreen":
-            bits.append("(off-screen; scroll to discover)")
+            bits.append("(off-screen; usable, the browser scrolls to it)")
         if self.checked is not None:
             bits.append("checked" if self.checked else "not checked")
         if self.selected is not None:
             bits.append("selected" if self.selected else "not selected")
+        if self.focused:
+            bits.append("focused")
         return " ".join(bits)
 
     def fingerprint_descriptor(self) -> str:
@@ -151,6 +158,7 @@ class Observation(BaseModel):
     heading: str = ""
     visible_text: str = ""
     aria_snapshot: str = ""
+    accessibility_tree_id: str | None = None
     elements: list[ObservedElement] = Field(default_factory=list)
     dialog_open: bool = False
     dialog_name: str = ""
@@ -289,6 +297,7 @@ class JourneyNode(BaseModel):
     annotation: str | None = None  # e.g. the goal product's price observed in this state
     dialog: bool = False
     screenshot_id: str | None = None
+    accessibility_tree_id: str | None = None
     friction_count: int = 0
     semantic_count: int = 0
     accessibility_count: int = 0
@@ -318,6 +327,8 @@ class FrictionMetrics(BaseModel):
     no_progress_actions: int = 0
     rejected_actions: int = 0
     validation_errors: int = 0
+    offscreen_discoveries: int = 0  # controls used only after scrolling to them (discovery cost)
+    scroll_actions: int = 0
 
     def score(self) -> int:
         """Transparent internal heuristic (0 = frictionless). For relative comparison only."""
@@ -339,6 +350,13 @@ class AgentState(BaseModel):
     run_id: str = Field(default_factory=short_id)
     goal: GoalSpec
     target_url: str
+    platform: Literal["web", "android"] = "web"
+    device_serial: str | None = None
+    android_package: str | None = None
+    android_activity: str | None = None
+    apk_path: str | None = None
+    record_video: bool = True
+    video_path: str | None = None
     provider: str = ""
     model: str = ""
     current_url: str = ""
@@ -356,9 +374,14 @@ class AgentState(BaseModel):
     last_outcome_note: str = ""
     goal_progress: float = Field(default=0.0, ge=0.0, le=1.0)
     goal_completed: bool = False
+    # verified = deterministic criteria passed; model_judged = no machine-checkable criteria, model said DONE
+    completion_mode: Literal["verified", "model_judged"] | None = None
     max_steps: int = 100
     stall_limit: int = 8
     last_progress_step: int = 0
+    # Only deterministic completion evidence can increase this counter. Model-reported
+    # progress remains a presentation hint and must never keep a stalled run alive.
+    verified_evidence_count: int = 0
     best_progress: float = 0.0
     recovery_attempts: int = 0
     consecutive_interruptions: int = 0  # unrecovered interruptions in a row; reset on each successful recovery

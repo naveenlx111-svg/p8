@@ -29,21 +29,40 @@ def _wants_vision(state: AgentState, obs: Observation) -> bool:
 
 
 def _coerce(data: dict, obs: Observation) -> dict:
-    """Light repairs that do not change meaning (models often drop/garble the observation id)."""
+    """Light, meaning-preserving repairs. A stale observation is never silently rebound."""
     gp = data.get("goal_progress")
     if isinstance(gp, (int, float)) and 1 < gp <= 100:
         data["goal_progress"] = gp / 100  # some models answer in percent
     na = data.get("next_action")
     if isinstance(na, dict):
+        claimed = na.get("observation_id")
+        if claimed and claimed != obs.observation_id:
+            raise ValueError(
+                f"next_action referenced stale observation {claimed}; current observation is {obs.observation_id}"
+            )
         na["observation_id"] = obs.observation_id
         if isinstance(na.get("action"), str):
             na["action"] = na["action"].lower().strip()
         if isinstance(na.get("rationale"), str):
             na["rationale"] = na["rationale"][:300]
+        # Meaning-preserving repairs for fields small models leave empty (never a change of action type):
+        if na.get("action") == "scroll" and na.get("direction") not in ("up", "down"):
+            why = f"{na.get('rationale') or ''} {na.get('display_label') or ''}".lower()
+            na["direction"] = "up" if " up" in f" {why}" or "top" in why else "down"
+        if na.get("action") != "type" and na.get("submit"):
+            na["submit"] = False
     for f in data.get("facts") or []:
         if isinstance(f, dict) and isinstance(f.get("value"), str):
             f["value"] = f["value"].replace(",", "").replace("₹", "").strip()
     return data
+
+
+def _explain(exc: Exception) -> str:
+    """Field-level reason ("next_action: scroll requires direction") so the correction retry can actually fix it."""
+    if isinstance(exc, ValidationError):
+        parts = [f"{'.'.join(str(x) for x in e['loc']) or 'reply'}: {e['msg']}" for e in exc.errors()[:4]]
+        return "; ".join(parts)[:400]
+    return (str(exc).splitlines()[0] if str(exc) else type(exc).__name__)[:300]
 
 
 async def plan(model: ReasoningModel, state: AgentState, obs: Observation, notes: list[str], screenshot: bytes | None) -> PlanResult:
@@ -62,5 +81,5 @@ async def plan(model: ReasoningModel, state: AgentState, obs: Observation, notes
             return PlanResult(decision, total_latency, attempt, image is not None)
         except (ValueError, ValidationError) as exc:
             state.metrics.schema_failures += 1
-            error = str(exc).splitlines()[0][:300] if str(exc) else type(exc).__name__
+            error = _explain(exc)
     raise ModelError(f"model output failed schema validation twice: {error}")

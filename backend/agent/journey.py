@@ -28,6 +28,7 @@ def upsert_node(state: AgentState, obs: Observation) -> tuple[JourneyNode, bool]
     node = JourneyNode(
         id=obs.fingerprint, label=node_label(obs), url=obs.url, route=obs.route, step_number=state.step_count,
         page_type=page_type(obs.route), dialog=obs.dialog_open, screenshot_id=obs.screenshot_id,
+        accessibility_tree_id=obs.accessibility_tree_id,
     )
     state.journey_graph_nodes.append(node)
     return node, True

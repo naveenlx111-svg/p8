@@ -38,9 +38,15 @@ function FindingCard({ f }: { f: Finding }) {
             {f.data.difference > 0 ? '+' : ''}{money(f.data.difference, f.data.currency)} ({f.data.percent > 0 ? '+' : ''}{f.data.percent}%)
           </span>
         </div>
+      ) : f.data.rule === 'semantic-action-cycle' ? (
+        <div className="mt-1 text-xs">
+          <div className="font-mono opacity-90">{(f.data.action_trace ?? []).join(' → ')}</div>
+          {(f.data.alternative_actions ?? []).length > 0 && <div className="mt-1"><b>Alternative paths:</b> {(f.data.alternative_actions ?? []).join(' · ')}</div>}
+        </div>
       ) : (
         <div className="mt-0.5 line-clamp-2 text-xs opacity-80">{f.evidence}</div>
       )}
+      {f.recommendation && <div className="mt-1 text-xs"><b>Recommendation:</b> {f.recommendation}</div>}
     </div>
   )
 }
@@ -49,8 +55,8 @@ function Item({ it }: { it: StreamItem }) {
   if (it.kind === 'finding') return <FindingCard f={it.f} />
   if (it.kind === 'verified')
     return (
-      <div className="slide-in rounded-lg border-l-4 border-emerald-600 bg-emerald-50 px-3 py-2 text-emerald-900">
-        <div className="text-xs font-bold tracking-wide">✓ GOAL VERIFIED BY CODE</div>
+      <div className={`slide-in rounded-lg border-l-4 px-3 py-2 ${it.modelJudged ? 'border-amber-500 bg-amber-50 text-amber-900' : 'border-emerald-600 bg-emerald-50 text-emerald-900'}`}>
+        <div className="text-xs font-bold tracking-wide">{it.modelJudged ? '◐ GOAL REACHED · MODEL-JUDGED (NOT CODE-VERIFIED)' : '✓ GOAL VERIFIED BY CODE'}</div>
         <div className="text-sm">{it.evidence.join(' · ')}</div>
       </div>
     )
@@ -108,7 +114,7 @@ export function DecisionStream({ state, onReplay }: { state: RunState; onReplay:
         {state.stream.map(it => <Item key={it.seq} it={it} />)}
         {state.status === 'completed' && s && (
           <div className="slide-in rounded-lg bg-emerald-600 px-3 py-3 text-white">
-            <div className="text-sm font-extrabold tracking-wide">MISSION COMPLETE · GOAL VERIFIED</div>
+            <div className="text-sm font-extrabold tracking-wide">{s.completion_mode === 'model_judged' ? 'MISSION COMPLETE · MODEL-JUDGED (add "Done when" criteria to verify)' : 'MISSION COMPLETE · GOAL VERIFIED'}</div>
             <div className="mt-1 text-sm">
               {s.actions} actions · {s.recoveries} autonomous recovery · {s.findings_by_category.semantic_inconsistency ?? 0} semantic
               inconsistency · {(s.findings_by_category.friction ?? 0) + (s.findings_by_category.occlusion ?? 0)} UX obstruction ·{' '}

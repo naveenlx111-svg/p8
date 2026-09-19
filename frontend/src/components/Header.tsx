@@ -5,13 +5,14 @@ interface Props {
   goal: string
   setGoal: (g: string) => void
   onLive: () => void
+  onCancel: () => void
   onReplay: () => void
   theme: 'light' | 'dark'
   onToggleTheme: () => void
   busy: boolean
 }
 
-export function Header({ state, goal, setGoal, onLive, onReplay, busy, theme, onToggleTheme }: Props) {
+export function Header({ state, goal, setGoal, onLive, onCancel, onReplay, busy, theme, onToggleTheme }: Props) {
   const st = state.started
   const step = state.score?.step ?? state.frame?.step ?? 0
   const max = st?.max_steps ?? 12
@@ -49,12 +50,12 @@ export function Header({ state, goal, setGoal, onLive, onReplay, busy, theme, on
         className="header-goal goal-input min-w-0 flex-1 rounded-lg px-3 py-2 text-sm text-slate-100 focus:border-blue-400 focus:outline-none"
       />
       <button
-        onClick={onLive}
-        disabled={busy || running}
+        onClick={running ? onCancel : onLive}
+        disabled={busy}
         className="header-live primary-action"
       >
         <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M5 3.8a.8.8 0 0 1 1.2-.7l10 6.2a.8.8 0 0 1 0 1.4l-10 6.2a.8.8 0 0 1-1.2-.7Z" /></svg>
-        <span>{busy || state.status === 'connecting' ? 'Starting…' : running ? 'Running' : 'Run live'}</span>
+        <span>{busy || state.status === 'connecting' ? 'Starting…' : running ? 'Stop run' : 'Run live'}</span>
       </button>
       <button
         onClick={onReplay}
@@ -74,7 +75,7 @@ export function Header({ state, goal, setGoal, onLive, onReplay, busy, theme, on
       <div className="header-progress flex w-56 flex-col gap-1">
         <div className="flex justify-between text-xs font-semibold text-slate-400">
           <span>STEP {step}/{max}</span>
-          <span>{progress}% GOAL</span>
+          <span>{state.status === 'completed' ? 'VERIFIED' : `${progress}% AI EST.`}</span>
         </div>
         <div className="progress-track h-2 overflow-hidden rounded-full">
           <div

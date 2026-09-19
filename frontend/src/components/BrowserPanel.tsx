@@ -2,16 +2,19 @@ import type { RunState } from '../useRun'
 
 interface Props {
   state: RunState
+  platform: 'web' | 'android'
   inspect: string | null
   clearInspect: () => void
 }
 
-export function BrowserPanel({ state, inspect, clearInspect }: Props) {
+export function BrowserPanel({ state, platform, inspect, clearInspect }: Props) {
   const backend = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '')
   const base = state.started?.artifact_base ? `${backend}${state.started.artifact_base}` : ''
   const node = inspect ? state.nodes[inspect] : null
   const image = node?.screenshot_id ?? state.frame?.image
   const url = node?.url ?? state.frame?.url
+  const tree = node?.accessibility_tree_id ?? state.frame?.accessibilityTree
+  const android = (state.started?.platform ?? platform) === 'android'
 
   return (
     <section className="workspace-panel flex min-h-0 flex-col rounded-xl border border-slate-200 bg-white">
@@ -22,8 +25,12 @@ export function BrowserPanel({ state, inspect, clearInspect }: Props) {
           <span className="h-2.5 w-2.5 rounded-full bg-slate-300" />
         </div>
         <div className="min-w-0 flex-1 truncate rounded-md bg-slate-100 px-2 py-1 font-mono text-xs text-slate-700">
-          {url ?? 'Browser preview · waiting for a run'}
+          {url ?? `${android ? 'Android device' : 'Browser'} preview · waiting for a run`}
         </div>
+        {tree && <a href={base + tree} target="_blank" rel="noreferrer"
+          className="rounded-md bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700" title="Captured platform accessibility hierarchy">
+          Accessibility tree
+        </a>}
         {node ? (
           <button onClick={clearInspect} className="rounded-md bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">
             Evidence: {node.label} · back to live ✕
@@ -38,7 +45,7 @@ export function BrowserPanel({ state, inspect, clearInspect }: Props) {
       </div>
       <div className="browser-viewport relative flex min-h-0 flex-1 items-center justify-center bg-slate-100">
         {image ? (
-          <img src={base + image} alt="Current browser frame of the target application" className="max-h-full max-w-full object-contain" />
+          <img src={base + image} alt={`Current ${android ? 'Android device' : 'browser'} frame of the target application`} className="max-h-full max-w-full object-contain" />
         ) : (
           <div className="browser-empty">
             <div className="browser-sculpture" aria-hidden="true">

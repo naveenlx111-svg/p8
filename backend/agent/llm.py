@@ -99,18 +99,28 @@ class OpenAIModel(ReasoningModel):
     def __init__(self, model: str):
         super().__init__(model)
         from openai import AsyncOpenAI
-        self._client = AsyncOpenAI(base_url=settings.openai_base_url, max_retries=0)
+        # ngrok-skip-browser-warning: self-hosted endpoints exposed via free ngrok tunnels
+        self._client = AsyncOpenAI(base_url=settings.openai_base_url, max_retries=0,
+                                   default_headers={"ngrok-skip-browser-warning": "1"})
+        self._json_mode = True  # some self-hosted servers reject response_format; detected on first call
 
     async def _complete(self, system: str, user: str, image: bytes | None) -> str:
+        from openai import BadRequestError
         content: list[dict] = [{"type": "text", "text": user}]
         if image:
             b64 = base64.standard_b64encode(image).decode()
             content.insert(0, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
-        resp = await self._client.chat.completions.create(
-            model=self.model, temperature=settings.temperature,
-            response_format={"type": "json_object"},
-            messages=[{"role": "system", "content": system}, {"role": "user", "content": content}],
-        )
+        kwargs: dict = {"model": self.model, "temperature": settings.temperature,
+                        "messages": [{"role": "system", "content": system}, {"role": "user", "content": content}]}
+        if self._json_mode:
+            try:
+                resp = await self._client.chat.completions.create(response_format={"type": "json_object"}, **kwargs)
+                return resp.choices[0].message.content or ""
+            except BadRequestError as exc:
+                if "response_format" not in str(exc) and "json" not in str(exc).lower():
+                    raise
+                self._json_mode = False  # fall back to prompt-only JSON; the planner still validates the schema
+        resp = await self._client.chat.completions.create(**kwargs)
         return resp.choices[0].message.content or ""
 
 

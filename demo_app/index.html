@@ -71,6 +71,9 @@ const PRODUCTS = [
   { id: "aura", name: "Aura Speaker", price: 3499, icon: "🔊", blurb: "Portable Bluetooth speaker." },
   { id: "pulse", name: "Pulse Watch", price: 5999, icon: "⌚", blurb: "Fitness smartwatch with heart-rate tracking." },
 ];
+// Controlled candidate release for PathLens' differential UX-regression demo.
+// The navigator receives only the URL and rendered UI; it never sees this flag.
+const RELEASE = new URLSearchParams(location.search).get("release") || "baseline";
 // Planted defect A: the cart charges a different unit price than the product page advertises.
 const CART_PRICE_OVERRIDE = { nova: 2799 };
 
@@ -144,12 +147,22 @@ const routes = {
     // Planted defect C1: the email field has visible text but no programmatic label.
     view.innerHTML = `<h1>Checkout</h1>
       <div class="card" style="max-width:520px">
+        ${RELEASE === "candidate" ? '<button type="button"><span aria-hidden="true">?</span></button>' : ''}
         <div class="field"><div class="fake-label">Email</div><input id="checkout-email" type="email" autocomplete="off"></div>
         <div class="field"><label for="checkout-name">Full name</label><input id="checkout-name" type="text" autocomplete="off"></div>
         <div class="field"><label for="checkout-address">Delivery address</label><input id="checkout-address" type="text" autocomplete="off"></div>
         <button class="pay-button" type="button" id="pay-btn">Pay ${inr(total)}</button>
       </div>`;
     document.getElementById("pay-btn").onclick = () => { location.hash = "#/complete"; };
+  },
+  shipping() {
+    view.innerHTML = `<h1>Delivery preferences</h1>
+      <div class="card" style="max-width:520px">
+        <p>Review delivery preferences before continuing.</p>
+        <label><input type="radio" name="delivery" checked> Standard delivery · 3–5 days</label>
+        <div style="margin-top:18px"><button class="btn" id="shipping-continue" type="button">Checkout</button></div>
+      </div>`;
+    document.getElementById("shipping-continue").onclick = () => { location.hash = "#/checkout"; };
   },
   complete() {
     store.cart = [];
@@ -164,7 +177,7 @@ function checkout() {
     document.getElementById("promo-modal").classList.remove("hidden");
     return;
   }
-  location.hash = "#/checkout";
+  location.hash = RELEASE === "candidate" ? "#/shipping" : "#/checkout";
 }
 function closePromo() { document.getElementById("promo-modal").classList.add("hidden"); }
 document.getElementById("promo-close").onclick = closePromo;

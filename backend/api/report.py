@@ -14,7 +14,7 @@ SEV_COLOR = {"critical": "#b42318", "high": "#d92d20", "medium": "#dc6803", "low
 SECTIONS = [
     ("UX friction & obstructions", {"friction", "occlusion", "dead_end", "ambiguity", "goal_progress"}),
     ("Semantic inconsistencies", {"semantic_inconsistency"}),
-    ("Accessibility (axe-core)", {"accessibility"}),
+    ("Accessibility evidence", {"accessibility"}),
     ("Autonomous recoveries", {"recovery"}),
     ("Safety gate", {"safety"}),
 ]
@@ -24,7 +24,19 @@ def _img(run_dir: Path, shot: str | None, width: int = 420) -> str:
     if not shot or not (run_dir / shot).exists():
         return ""
     b64 = base64.b64encode((run_dir / shot).read_bytes()).decode()
-    return f'<img src="data:image/jpeg;base64,{b64}" width="{width}" alt="Screenshot {escape(shot)}">'
+    mime = "image/png" if shot.lower().endswith(".png") else "image/jpeg"
+    return f'<img src="data:{mime};base64,{b64}" width="{width}" alt="Screenshot {escape(shot)}">'
+
+
+def _tree(run_dir: Path, tree_id: str | None) -> str:
+    if not tree_id:
+        return ""
+    path = run_dir / Path(tree_id).name
+    if not path.is_file():
+        return ""
+    text = path.read_text(encoding="utf-8", errors="replace")
+    return (f"<details><summary>Captured accessibility tree · {escape(path.name)}</summary>"
+            f"<pre>{escape(text[:12000])}</pre></details>")
 
 
 def render_report(state: AgentState, run_dir: Path) -> str:
@@ -65,6 +77,14 @@ def render_report(state: AgentState, run_dir: Path) -> str:
                 shot = None
             if f.category == "accessibility" and f.data.get("html"):
                 extra = f"<pre>{escape(f.data['html'])}</pre>"
+            if f.category == "accessibility":
+                method = f.data.get("method", "deterministic accessibility analysis")
+                extra += f"<p class='meta'>Approach: {escape(str(method))}</p>"
+                extra += _tree(run_dir, f.data.get("accessibility_tree_id"))
+            if f.data.get("rule") == "semantic-action-cycle":
+                alternatives = f.data.get("alternative_actions", [])
+                if alternatives:
+                    extra += f"<p><b>Alternative controls observed:</b> {escape(', '.join(alternatives))}</p>"
             src = {"deterministic": "verified by deterministic check", "axe": "verified by axe-core",
                    "model": "AI observation (unverified)"}[f.source]
             cards.append(
@@ -76,6 +96,17 @@ def render_report(state: AgentState, run_dir: Path) -> str:
         finding_html.append(f"<h2>{title}</h2>{''.join(cards)}")
 
     fr = state.friction
+    accessibility_method = (
+        "Captured Android UIAutomator accessibility hierarchy plus deterministic accessible-name and 48dp touch-target checks."
+        if state.platform == "android" else
+        "Captured browser accessibility snapshot plus axe-core rules and deterministic modal keyboard-focus traversal."
+    )
+    tree_count = sum(1 for node in state.journey_graph_nodes if node.accessibility_tree_id)
+    video_html = ""
+    if state.video_path:
+        video_url = f"/artifacts/run_{state.run_id}/{escape(state.video_path)}"
+        video_html = (f'<p><a href="{video_url}">▶ Open/download full journey recording</a> '
+                      f'<span class="meta">({escape(state.video_path)}; served with this run)</span></p>')
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><title>PathLens audit {escape(state.run_id)}</title>
 <style>
 body{{font-family:system-ui,sans-serif;max-width:1000px;margin:32px auto;padding:0 20px;color:#101828;line-height:1.45}}
@@ -95,7 +126,7 @@ img{{border:1px solid #d0d5dd;border-radius:6px;margin-top:8px}}
 </style></head><body>
 <p class="meta">PATHLENS · AUTONOMOUS UX AUDIT</p>
 <h1>{escape(state.goal.raw)}</h1>
-<p class="meta">Target {escape(state.target_url)} · Run {escape(state.run_id)} · {state.metrics.started_at:%Y-%m-%d %H:%M UTC} ·
+<p class="meta">Platform {escape(state.platform.upper())} · Target {escape(state.target_url)} · Run {escape(state.run_id)} · {state.metrics.started_at:%Y-%m-%d %H:%M UTC} ·
 Model {escape(state.provider)}/{escape(state.model)}{' (OFFLINE TEST DOUBLE, not AI)' if state.provider == 'scripted' else ''}</p>
 <p><span class="status">{'GOAL REACHED · VERIFIED' if status_ok else 'GOAL NOT REACHED'}</span>
 {'' if status_ok else escape(state.run_error or '')}</p>
@@ -108,8 +139,11 @@ Model {escape(state.provider)}/{escape(state.model)}{' (OFFLINE TEST DOUBLE, not
 <div class="kpi"><b>{fr.recoveries}</b>autonomous recover{'ies' if fr.recoveries != 1 else 'y'}</div>
 <div class="kpi"><b>{state.accessibility_score}/100</b>automated accessibility risk score</div>
 </div>
-<p class="meta">{escape(DISCLAIMER)}</p>
+<p class="meta">Approach: {escape(accessibility_method)}</p>
+<p class="meta">{escape(DISCLAIMER if state.platform == 'web' else 'Automated Android checks are evidence-backed heuristics, not an accessibility certification.')}</p>
 <p class="meta">Accessibility coverage: {escape(state.accessibility_coverage)}. The score covers only successfully audited states; partial or failed coverage is not a clean audit.</p>
+<p class="meta">{tree_count} state-linked accessibility tree artifact{'s' if tree_count != 1 else ''} captured.</p>
+{video_html}
 <p>{state.step_count} actions in {s['runtime_s']}s · {s['model_calls']} model calls (p50 {s['model_latency_p50_ms']} ms) ·
 friction events: {fr.interruptions} interruption, {fr.blocked_interactions} blocked, {fr.failed_interactions} failed,
 {fr.repeated_states} repeated state, {fr.backtracks} backtracks, {fr.no_progress_actions} no-progress actions
@@ -120,7 +154,7 @@ friction events: {fr.interruptions} interruption, {fr.blocked_interactions} bloc
 {''.join(journey_rows)}</table>
 {''.join(finding_html)}
 <p class="meta" style="margin-top:40px">Generated by PathLens. The AI investigates the experience; deterministic tooling
-verifies what should be deterministic (fact comparison, goal completion, axe-core rules).</p>
+verifies what should be deterministic (fact comparison, goal completion, and platform-native accessibility evidence).</p>
 </body></html>"""
 
 

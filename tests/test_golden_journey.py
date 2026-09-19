@@ -52,6 +52,8 @@ def test_golden_journey_fresh_browser(tmp_path, demo_app_url):
     assert "friction" in cats and "recovery" in cats
     rules = {v.id for v in state.axe_results}
     assert {"label", "color-contrast"} <= rules
+    focus_rules = {f.data.get("rule") for f in state.critic_findings if f.category == "accessibility"}
+    assert {"modal-focus-entry", "modal-focus-trap"} <= focus_rules
     assert state.accessibility_score == 61
     assert state.step_count <= 12
     assert (tmp_path / f"run_{state.run_id}" / "report.html").exists()

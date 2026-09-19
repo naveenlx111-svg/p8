@@ -19,7 +19,8 @@ def check(action: BrowserAction, element: ObservedElement | None, allow_irrevers
     if allow_irreversible:
         return None
     label = " ".join(filter(None, [
-        element.name if element else None, element.placeholder if element else None, action.display_label or "",
+        element.name if element else None, element.placeholder if element else None,
+        " ".join(element.form_submit_labels) if element else None, action.display_label or "",
     ]))
     for phrase in forbidden_actions or []:
         if phrase and phrase.lower() in label.lower():
@@ -33,6 +34,8 @@ def check(action: BrowserAction, element: ObservedElement | None, allow_irrevers
         return None
     if action.action == ActionType.CLICK and IRREVERSIBLE.search(element.name or ""):
         return f'"{element.name}" looks like an irreversible or financial action (payment, order, subscription, deletion or message)'
+    if action.action == ActionType.PRESS and action.key == "Enter" and IRREVERSIBLE.search(label):
+        return f'pressing Enter from "{element.name or element.role}" may activate "{label}", an irreversible or financial action'
     if action.action == ActionType.TYPE and (element.input_type == "password" or SENSITIVE_FIELD.search(label)):
         # A value the tester wrote into the goal (e.g. test credentials) is authorised; anything invented is not.
         if action.text and len(action.text) >= 3 and action.text in goal_text:

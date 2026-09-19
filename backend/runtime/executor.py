@@ -100,7 +100,14 @@ async def execute(page: Page, registry: ElementRegistry, action: BrowserAction, 
         elif action.action == ActionType.HOVER:
             await handle.hover(timeout=timeout_ms)
         elif action.action == ActionType.SCROLL:
-            await page.mouse.wheel(0, -600 if action.direction == "up" else 600)
+            scroll_target = registry.resolve(action.observation_id, action.element_id) if action.element_id is not None else None
+            # An explicit direction always wins; jumping to a control only when it is off-screen and no direction was given.
+            if scroll_target and not action.direction and scroll_target[1].visibility == "offscreen":
+                # "Scroll to X": bring that control into view, the way a user scrolls towards what they spotted.
+                target = scroll_target[1].descriptor()
+                await scroll_target[0].scroll_into_view_if_needed(timeout=timeout_ms)
+            else:
+                await page.mouse.wheel(0, -600 if action.direction == "up" else 600)
         elif action.action == ActionType.BACK:
             await page.go_back(timeout=timeout_ms)
         elif action.action == ActionType.PRESS:

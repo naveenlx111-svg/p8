@@ -28,6 +28,10 @@ export interface RunStarted {
   max_steps: number
   artifact_base: string
   replay_name?: string
+  platform: 'web' | 'android'
+  device_serial?: string | null
+  android_package?: string | null
+  record_video: boolean
 }
 
 export interface Fact { kind: string; entity: string; value: number; currency: string; context: string }
@@ -85,6 +89,7 @@ export interface JourneyNode {
   annotation: string | null
   dialog: boolean
   screenshot_id: string | null
+  accessibility_tree_id: string | null
   friction_count: number
   semantic_count: number
   accessibility_count: number
@@ -126,6 +131,7 @@ export interface ScoreUpdate {
 export interface RunSummary {
   status: string
   goal_completed: boolean
+  completion_mode?: 'verified' | 'model_judged' | null
   actions: number
   recoveries: number
   findings_by_category: Record<string, number>
@@ -136,4 +142,24 @@ export interface RunSummary {
   report_url?: string
   reason?: string
   error?: string | null
+  platform?: 'web' | 'android'
+  video_path?: string | null
+  video_url?: string
+  accessibility_trees?: number
+  action_loops?: number
+}
+
+export interface RunComparison {
+  verdict: 'regression' | 'improvement' | 'no_material_change'
+  severity: 'none' | 'medium' | 'high' | 'critical'
+  comparable_goal: boolean
+  baseline: { run_id: string; target_url: string; goal_completed: boolean; actions: number; runtime_s: number; friction_score: number; accessibility_score: number }
+  candidate: { run_id: string; target_url: string; goal_completed: boolean; actions: number; runtime_s: number; friction_score: number; accessibility_score: number }
+  deltas: { actions: number; runtime_s: number; friction_score: number; accessibility_score: number }
+  reasons: string[]
+  improvements: string[]
+  new_findings: Finding[]
+  resolved_findings: Finding[]
+  milestones: { baseline: Array<{ milestone: string; label: string; step: number }>; candidate: Array<{ milestone: string; label: string; step: number }>; added: string[]; missing: string[] }
+  method: string
 }

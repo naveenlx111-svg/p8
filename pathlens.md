@@ -101,7 +101,7 @@ D. Step-by-step tracing & Reporting
 
 **Problem:** UI tests check that clicks work, not whether a real user can finish a task without confusion, traps or barriers.
 
-**Solution:** Given only a goal, our agent uses a web app like a user, flags friction and inconsistencies, recovers, and audits.
+**Solution:** Given only a goal, our agent uses a web or Android app like a user, flags friction and inconsistencies, recovers, and audits.
 
 **Who benefits:** QA and product teams catch journey-breaking UX, pricing and accessibility bugs before users do, without writing scripts.
 
@@ -111,7 +111,7 @@ D. Step-by-step tracing & Reporting
 
 **What are you building?**
 
-PathLens: a web agent that takes a target URL plus a plain-English goal and drives a real Chromium browser one action at a time, using only what a user or screen reader gets (visible text, accessibility tree, controls). It remembers facts across screens, detects friction, recovers, verifies success in code, runs axe-core, and streams everything to a live dashboard and HTML audit.
+PathLens is a platform-neutral synthetic-user agent. It takes a target URL or Android APK/installed package plus a plain-English goal and drives a real Chromium browser, phone, or emulator one action at a time, using only visible UI and the platform accessibility tree. It records video, remembers facts across screens, detects action loops and friction, suggests alternative controls, recovers, verifies success in code, and streams evidence to a live dashboard and HTML audit.
 
 **How does it solve the problem statement?**
 
@@ -123,12 +123,12 @@ No selectors or scripts: the agent picks from controls it can currently see, so 
 - Goal-driven black-box navigation: LLM chooses one action per step from an ephemeral control list
 - Spots "click worked, goal didn't": unplanned dialogs, blocked controls; then recovers on its own
 - Cross-screen memory: prices read by the LLM, checked against the page and compared in plain code
-- Code-verified goal completion + axe-core accessibility audit with a transparent risk score
-- Live dashboard (browser, decisions, journey graph) + HTML audit + recorded replay of every run
+- Code-verified completion + platform accessibility-tree capture, axe/native checks, approach and remediation
+- Web + Android ADB execution, live journey graph, HTML audit, per-run video and replay evidence
 
 **What are you deliberately NOT doing? (Optional)**
 
-Mobile/iOS/Android, cross-browser runs, full WCAG certification, auth/login flows, auto-fixing code, exhaustive crawling, and any irreversible action (paying, ordering, subscribing, deleting).
+iOS, cross-browser runs, full WCAG certification, auto-fixing code, exhaustive crawling, and any irreversible action (paying, ordering, subscribing, deleting).
 
 ---
 
@@ -162,7 +162,7 @@ Every release, synthetic users with different goals and personas (keyboard-only,
 
 **What your hackathon build actually delivers today:**
 
-One working loop on web: from a goal alone, a local 7B model (via Ollama) completes a search → product → cart → checkout journey on our demo shop 3/3 fresh runs, finds a price mismatch, a checkout-blocking popup (and recovers), and 2 axe violations, with a live dashboard, replay and HTML audit.
+One shared agent loop on web and Android. On web, a local 7B model completes search → product → cart → checkout 3/3 fresh runs, finds a price mismatch, recovers from a checkout popup, and detects accessibility issues. On Android, the ADB adapter installs/launches apps, derives semantic actions from UIAutomator, taps/types/presses like a user, captures the native accessibility tree and frames, applies deterministic mobile checks, and records MP4 evidence. It was live-tested on an Android 36 emulator through a real Settings navigation.
 
 **Before vs. After**
 
@@ -256,11 +256,11 @@ The LLM never writes selectors: each step we list visible controls and it picks 
 | Layer | Technology |
 |---|---|
 | Frontend / Interface | React + Vite + Tailwind, React Flow graph; Python CLI |
-| Backend | Python, FastAPI, WebSockets, Playwright (Chromium) |
+| Backend | Python, FastAPI, WebSockets, Playwright, Android ADB/UIAutomator |
 | Agent Framework | LangGraph (small state machine) + Pydantic schemas |
-| Database / Storage | No DB: JSONL event logs + screenshot files |
+| Database / Storage | No DB: JSONL + screenshots + trees + journey video |
 | Hosting | Local laptop; LLM local via Ollama (cloud API optional) |
-| Other | axe-core 4.10 (vendored), pytest |
+| Other | axe-core 4.10, ADB/aapt/screenrecord, pytest |
 
 ---
 
@@ -276,7 +276,10 @@ Max 120 characters per bullet.
 
 - Golden journey from goal text alone: 3/3 fresh-browser runs with local qwen2.5:7b, 6 actions, ~30 s
 - Price mismatch, checkout-popup friction + autonomous recovery, code-verified completion, axe audit
-- Live dashboard, journey graph, HTML audit export, replay of recorded runs, /health check, 17 tests
+- Real Tab-sequence modal audit verifies focus-entry and focus-trap failures beyond static axe checks
+- Android phone/emulator/APK mode: UIAutomator tree, semantic actions, native a11y checks, MP4 recording
+- Live dashboard, journey graph, HTML audit export, replay, /health check, cancellation, 44 tests
+- Deterministic A/B release comparison: matched milestones, action/friction deltas, and new verified findings
 - Also completes goals on 3rd-party sites (SauceDemo, Demoblaze) from just a URL + goal typed in the dashboard
 - Caught a real SauceDemo bug unaided: typing in Last Name overwrites First Name (read-back check)
 
@@ -289,8 +292,8 @@ Max 120 characters per bullet.
 
 **Not working or not built yet:**
 
-- Multi-path exploration, version A vs B regression comparison, keyboard-only / focus-order testing
-- Mobile apps and other browsers
+- Multi-path exploration and a full keyboard-only journey persona (modal focus auditing is already working)
+- iOS apps and other browser engines
 
 **What we'd most like to be judged on:**
 
@@ -304,15 +307,15 @@ The perceive → act → verify loop: the agent recovers from a popup no one scr
 
 ### Idea 1
 
-**Name:** Version A vs B UX regression
+**Name:** Bounded multi-path exploration
 
-**What it is:** Run the same goal on two versions of an app and compare verified metrics: completed?, steps, interruptions, blocked clicks, new a11y rules.
+**What it is:** Continue after first success to discover a second route and one dead end within an explicit branch budget.
 
-**Why it matters:** Both versions may "pass" functionally while one got harder to use; that is the regression users feel.
+**Why it matters:** It directly removes scripted testing's single-path bias and makes unexplored coverage visible.
 
-**How we'd build it:** Serve two demo-app variants, run the same GoalSpec on each, diff the saved run summaries, show a side-by-side card.
+**How we'd build it:** Save semantic branch candidates, restore a clean baseline, re-resolve controls by role/name, and merge paths into the journey graph.
 
-**Done when:** Version B adds a popup + extra step; the diff flags "+2 actions, +1 interruption" while both runs still reach checkout.
+**Done when:** The same goal completes through search and category navigation, while a deals branch is recorded as a dead end.
 
 ### Idea 2
 

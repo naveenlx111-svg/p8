@@ -38,6 +38,7 @@ class Settings(BaseSettings):
 
     artifacts_dir: Path = ROOT / "artifacts"
     replay_dir: Path = ROOT / "replay_runs"
+    upload_dir: Path = ROOT / "uploads"
     axe_path: Path = ROOT / "backend" / "vendor" / "axe.min.js"
 
 

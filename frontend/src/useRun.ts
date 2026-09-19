@@ -7,14 +7,15 @@ import type {
 export type StreamItem =
   | { kind: 'decision'; seq: number; d: Decision; outcome?: ActionCompleted }
   | { kind: 'finding'; seq: number; f: Finding }
-  | { kind: 'verified'; seq: number; evidence: string[] }
+  | { kind: 'verified'; seq: number; evidence: string[]; modelJudged?: boolean }
   | { kind: 'rejected'; seq: number; a: ActionCompleted }
 
 export interface RunState {
   runId: string | null
-  status: 'idle' | 'connecting' | 'running' | 'completed' | 'failed'
+  status: 'idle' | 'connecting' | 'running' | 'disconnected' | 'completed' | 'failed'
+  connectionError: string | null
   started: RunStarted | null
-  frame: { image: string; url: string; step: number } | null
+  frame: { image: string; url: string; step: number; accessibilityTree?: string | null } | null
   stream: StreamItem[]
   nodes: Record<string, JourneyNode>
   nodeOrder: string[]
@@ -31,13 +32,14 @@ export interface RunState {
 const initial: RunState = {
   runId: null, status: 'idle', started: null, frame: null, stream: [], nodes: {}, nodeOrder: [], edges: [],
   activeNode: null, findings: [], violations: [], score: null, summary: null, lastSeq: 0, pendingAction: null,
+  connectionError: null,
 }
 
 type Action = { type: 'reset'; runId: string } | { type: 'event'; ev: RunEvent } | { type: 'ws_error' }
 
 function reduce(s: RunState, a: Action): RunState {
   if (a.type === 'reset') return { ...initial, runId: a.runId, status: 'connecting' }
-  if (a.type === 'ws_error') return s
+  if (a.type === 'ws_error') return { ...s, status: 'disconnected', connectionError: 'Live stream disconnected after repeated retries. The run may still be recoverable from its saved event log.' }
   const ev = a.ev
   if (ev.sequence <= s.lastSeq) return s // idempotent on reconnect
   const p = ev.payload
@@ -46,9 +48,9 @@ function reduce(s: RunState, a: Action): RunState {
     case 'run_started':
       return { ...next, started: p as RunStarted, status: 'running' }
     case 'browser_frame':
-      return { ...next, frame: { image: p.image, url: p.url, step: p.step } }
+      return { ...next, frame: { image: p.image, url: p.url, step: p.step, accessibilityTree: p.accessibility_tree_id } }
     case 'observation':
-      if (p.verification) return { ...next, stream: [...s.stream, { kind: 'verified', seq: ev.sequence, evidence: p.verification.evidence }] }
+      if (p.verification) return { ...next, stream: [...s.stream, { kind: 'verified', seq: ev.sequence, evidence: p.verification.evidence, modelJudged: !!p.verification.model_judged }] }
       return next
     case 'decision':
       return { ...next, stream: [...s.stream, { kind: 'decision', seq: ev.sequence, d: p as Decision }] }
@@ -101,10 +103,13 @@ export function useRun() {
   const wsRef = useRef<WebSocket | null>(null)
   const seqRef = useRef(0)
   const doneRef = useRef(false)
-  seqRef.current = state.lastSeq
-  doneRef.current = state.status === 'completed' || state.status === 'failed'
+  const reconnectTimerRef = useRef<number | null>(null)
+  useEffect(() => {
+    seqRef.current = state.lastSeq
+    doneRef.current = state.status === 'completed' || state.status === 'failed'
+  }, [state.lastSeq, state.status])
 
-  const connect = useCallback((runId: string, attempt = 0) => {
+  const connect = useCallback(function connectRun(runId: string, attempt = 0) {
     const defaultProto = location.protocol === 'https:' ? 'wss' : 'ws'
     const backend = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '')
     const wsBase = import.meta.env.VITE_WS_URL || (backend ? backend.replace(/^http/, 'ws') : `${defaultProto}://${location.host}`)
@@ -112,16 +117,24 @@ export function useRun() {
     wsRef.current = ws
     ws.onmessage = m => dispatch({ type: 'event', ev: JSON.parse(m.data) })
     ws.onclose = () => {
-      if (wsRef.current !== ws || doneRef.current || attempt > 20) return
-      setTimeout(() => connect(runId, attempt + 1), 800) // reconnect, resuming after the last sequence
+      if (wsRef.current !== ws || doneRef.current) return
+      if (attempt >= 20) {
+        dispatch({ type: 'ws_error' })
+        return
+      }
+      reconnectTimerRef.current = window.setTimeout(() => connectRun(runId, attempt + 1), 800)
     }
   }, [])
 
-  useEffect(() => () => { wsRef.current?.close() }, [])
+  useEffect(() => () => {
+    wsRef.current?.close()
+    if (reconnectTimerRef.current !== null) window.clearTimeout(reconnectTimerRef.current)
+  }, [])
 
   const start = useCallback(async (body: Record<string, unknown>) => {
     wsRef.current?.close()
     wsRef.current = null
+    if (reconnectTimerRef.current !== null) window.clearTimeout(reconnectTimerRef.current)
     const backend = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '')
     const r = await fetch(`${backend}/api/runs`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
     if (!r.ok) throw new Error(await r.text())
@@ -132,6 +145,12 @@ export function useRun() {
     connect(run_id)
   }, [connect])
 
-  return { state, start }
-}
+  const cancel = useCallback(async () => {
+    if (!state.runId) return
+    const backend = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '')
+    const response = await fetch(`${backend}/api/runs/${state.runId}`, { method: 'DELETE' })
+    if (!response.ok) throw new Error(await response.text())
+  }, [state.runId])
 
+  return { state, start, cancel }
+}

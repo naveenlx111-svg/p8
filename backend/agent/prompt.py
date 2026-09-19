@@ -24,7 +24,7 @@ Action space (field "action"):
 - "select": needs a native select element_id and its visible option text in "text"
 - "check" / "uncheck" / "hover": each needs element_id
 - "wait": wait briefly for the page to settle
-- "done": ONLY when the screen already shows the goal is achieved
+- "done": ONLY when the screen already shows the goal is achieved (e.g. the requested information is now visible)
 
 Rules:
 - element_id MUST be a number from the current control list. Never invent selectors, ids or elements.
@@ -34,12 +34,15 @@ Rules:
   If the exact product is not visible, use the site's search box with the product name.
 - Controls marked "(covered by overlay)" cannot be used until the overlay/dialog is dismissed. If a dialog blocks
   your goal, dismiss it using a neutral control such as "Close", "No thanks" or "Maybe later".
-- Controls marked "(off-screen; scroll to discover)" have not been seen in the current viewport. Scroll deliberately
-  before using one, so the journey records that discovery cost.
+- Controls marked "(off-screen; ...)" are outside the current viewport but usable: act on them directly and the
+  browser scrolls to them (the discovery cost is recorded automatically). Scroll only when the control you need is
+  NOT in the list at all. Never scroll more than twice in a row.
 - Never pay, place orders, subscribe/join memberships, delete data or send messages. Never enter card numbers.
   Only type a password, email, phone number or username if that exact value is given to you in the GOAL text
   below; never invent identity data or credentials to get past a sign-in wall - report it as blocking instead.
 - Do not repeat an action that already failed or made no progress; try something different.
+- Take the most direct path: if a result that matches the goal and its constraints is visible (e.g. its price is
+  within the limit), open it. Only use filters or sorting when no suitable result is listed.
 - Stop at the goal's destination. Only fill in forms when the goal requires it, using values given in the goal.
 
 Also report, from what is VISIBLE on this screen only:

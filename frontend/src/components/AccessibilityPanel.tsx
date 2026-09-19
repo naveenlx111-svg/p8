@@ -4,7 +4,7 @@ const IMPACT: Record<string, string> = {
   critical: 'bg-red-600', serious: 'bg-orange-500', moderate: 'bg-amber-400', minor: 'bg-slate-400',
 }
 
-export function AccessibilityPanel({ state }: { state: RunState }) {
+export function AccessibilityPanel({ state, platform }: { state: RunState; platform: 'web' | 'android' }) {
   const sc = state.score
   const score = sc?.accessibility_score ?? 100
   const counts = sc?.accessibility_counts ?? { critical: 0, serious: 0, moderate: 0, minor: 0 }
@@ -12,6 +12,12 @@ export function AccessibilityPanel({ state }: { state: RunState }) {
   const fr = sc?.friction
   const backend = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '')
   const report = state.summary?.report_url ? `${backend}${state.summary.report_url}` : null
+  const video = state.summary?.video_url ? `${backend}${state.summary.video_url}` : null
+  const artifactBase = state.started?.artifact_base ? `${backend}${state.started.artifact_base}` : ''
+  const accessibilityFindings = state.findings.filter(f => f.category === 'accessibility')
+  const method = (state.started?.platform ?? platform) === 'android'
+    ? 'UIAutomator hierarchy + deterministic accessible-name and 48dp touch-target checks.'
+    : 'Browser accessibility snapshot + axe-core rules + keyboard focus traversal for dialogs.'
 
   return (
     <section className="workspace-panel accessibility-panel flex min-h-0 flex-col rounded-xl border border-slate-200 bg-white">
@@ -44,8 +50,18 @@ export function AccessibilityPanel({ state }: { state: RunState }) {
           </ul>
         )}
         <p className="text-[10px] leading-tight text-slate-400">
-          {sc?.disclaimer ?? 'Automated heuristic based on detected accessibility violations; not a WCAG certification.'} Rules checked by axe-core.
+          <b>Approach:</b> {method} {sc?.disclaimer ?? 'Automated heuristic based on detected accessibility violations; not a WCAG certification.'}
         </p>
+        {accessibilityFindings.length > 0 && <div className="flex flex-col gap-1.5">
+          <div className="text-[10px] font-bold tracking-widest text-slate-500">EVIDENCE &amp; RECOMMENDATIONS</div>
+          {accessibilityFindings.slice(-4).map(finding => <div key={finding.finding_id} className="rounded bg-slate-50 p-2 text-xs">
+            <div className="font-semibold text-slate-900">{finding.code} · {finding.title}</div>
+            <div className="mt-0.5 text-slate-600">{finding.evidence}</div>
+            {finding.recommendation && <div className="mt-1 text-blue-700"><b>Fix:</b> {finding.recommendation}</div>}
+            {finding.data.accessibility_tree_id && <a className="mt-1 inline-block font-semibold text-blue-700 underline"
+              href={`${artifactBase}${finding.data.accessibility_tree_id}`} target="_blank" rel="noreferrer">Open captured accessibility tree</a>}
+          </div>)}
+        </div>}
         {fr && (
           <div>
             <div className="text-[10px] font-bold tracking-widest text-slate-500">MEASURED FRICTION EVENTS</div>
@@ -61,11 +77,14 @@ export function AccessibilityPanel({ state }: { state: RunState }) {
             </div>
           </div>
         )}
-        {report && (
-          <a href={`${report}?download=true`} className="mt-auto rounded-lg bg-slate-900 px-3 py-2 text-center text-sm font-semibold text-white hover:bg-slate-700">
+        <div className="mt-auto grid gap-1.5">
+          {video && <a href={video} target="_blank" rel="noreferrer" className="rounded-lg bg-blue-700 px-3 py-2 text-center text-sm font-semibold text-white hover:bg-blue-600">
+            ▶ Journey video
+          </a>}
+          {report && <a href={`${report}?download=true`} className="rounded-lg bg-slate-900 px-3 py-2 text-center text-sm font-semibold text-white hover:bg-slate-700">
             ⬇ Download audit
-          </a>
-        )}
+          </a>}
+        </div>
       </div>
     </section>
   )

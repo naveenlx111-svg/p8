@@ -6,7 +6,8 @@ from backend.events import EventBus, load_events
 from backend.runtime.accessibility import risk_score
 from backend.runtime.fingerprint import canonical_route, state_fingerprint
 from backend.schemas import (
-    ActionType, AxeViolation, BrowserAction, ExecutionStep, ModelDecision, ModelFact, Observation, ObservedElement, PageFact,
+    ActionType, AgentState, AxeViolation, BrowserAction, CriticFinding, ExecutionStep, GoalSpec, JourneyNode,
+    ModelDecision, ModelFact, Observation, ObservedElement, PageFact,
 )
 
 
@@ -156,10 +157,13 @@ def test_action_schema_validation_and_coercion():
            "facts": [{"kind": "product_price", "entity": "Nova", "value": "2,799", "context": "cart"}],
            "findings": [], "next_action": {"observation_id": "WRONG", "action": "CLICK", "element_id": 3,
                                            "rationale": "go", "confidence": 0.9}}
+    import pytest
+    with pytest.raises(ValueError, match="stale observation"):
+        _coerce(raw, obs())
+    raw["next_action"].pop("observation_id")
     d = ModelDecision.model_validate(_coerce(raw, obs()))
     assert d.next_action.observation_id == "o1" and d.next_action.action == ActionType.CLICK
     assert d.facts[0].value == 2799
-    import pytest
     with pytest.raises(Exception):
         ModelDecision.model_validate({"page_summary": "x", "goal_progress": 2, "next_action": {}})
 
@@ -226,8 +230,9 @@ def test_completion_rejects_over_budget_price():
     assert not completion.verify(g, o, over_budget, cart_product_seen=True).completed
     within_budget = [_pf(2799, 3, "checkout", "checkout")]
     assert completion.verify(g, o, within_budget, cart_product_seen=True).completed
-    # No grounded price at all: unknown must not silently block completion of the other criteria.
-    assert completion.verify(g, o, [], cart_product_seen=True).completed
+    # No grounded price at all: unknown can never satisfy an explicit price constraint.
+    unknown = completion.verify(g, o, [], cart_product_seen=True)
+    assert not unknown.completed and "no verified price" in unknown.missing[0]
 
 
 def test_cart_seen_is_not_a_sticky_historical_flag():
@@ -265,6 +270,17 @@ def test_completion_query_param_does_not_fake_a_destination():
     email = ObservedElement(element_id=0, role="textbox", input_type="email")
     assert not completion.verify(g, obs(route="/#/search?q=checkout", elements=[email])).completed
     assert completion.verify(g, obs(route="/#/checkout?ref=email", elements=[email])).completed
+    assert completion.verify(g, obs(route="/?release=candidate#/checkout?ref=email", elements=[email])).completed
+
+
+def test_completion_route_matching_uses_segments_not_substrings():
+    g = compile_goal("reach checkout")
+    email = ObservedElement(element_id=0, role="textbox", input_type="email")
+    assert not completion.verify(g, obs(route="/#/checkout-rules", elements=[email])).completed
+    assert not completion.verify(g, obs(route="/#/checkout-item/3", elements=[email])).completed
+    assert completion.verify(g, obs(route="/#/flow/checkout/review", elements=[email])).completed
+    assert completion.verify(g, obs(route="/checkout-step-one.html", elements=[email])).completed
+    assert completion.verify(g, obs(route="/checkout_overview", elements=[email])).completed
 
 
 def test_price_grounding_does_not_round_decimal_to_visible_integer():
@@ -366,6 +382,12 @@ def test_safety_gate_consumes_forbidden_actions_and_gates_enter_submission():
     assert safety.check(enter, None, False) is not None
     harmless_enter = BrowserAction(observation_id="o", action=ActionType.PRESS, key="Enter", display_label="Search")
     assert safety.check(harmless_enter, None, False) is None
+    focused_search = ObservedElement(element_id=0, role="searchbox", name="Search",
+                                     focused=True, form_submit_labels=["Search"])
+    assert safety.check(enter.model_copy(update={"display_label": "Continue"}), focused_search, False) is None
+    focused_checkout = ObservedElement(element_id=0, role="textbox", name="Promo code",
+                                       focused=True, form_submit_labels=["Place order"])
+    assert safety.check(enter.model_copy(update={"display_label": "Continue"}), focused_checkout, False) is not None
 
 
 def test_replay_name_path_confinement():
@@ -389,3 +411,100 @@ def test_safety_blocks_invented_identity_data():
     assert safety.check(typ, email, False, "add earphones to cart") is not None
     user = BrowserAction(observation_id="o", action=ActionType.TYPE, element_id=0, text="standard_user")
     assert safety.check(user, ObservedElement(element_id=0, role="textbox", name="Username"), False, "log in as standard_user") is None
+
+
+def test_password_observation_says_filled_without_exposing_or_looking_empty():
+    password = ObservedElement(element_id=1, role="textbox", name="Password", input_type="password", value="••••••")
+    description = password.describe()
+    assert "already filled" in description and "secret hidden" in description
+    assert "••••••" not in description
+
+
+def test_repeated_sensitive_action_matches_by_semantic_target_not_secret_text():
+    from backend.agent.graph import _repeats_no_progress
+    from backend.schemas import TargetDescriptor
+
+    state = AgentState(goal=GoalSpec(raw="log in"), target_url="https://example.test", current_state_id="login")
+    target = TargetDescriptor(role="textbox", name="Password", input_type="password")
+    for step_number in (1, 2):
+        state.execution_history.append(ExecutionStep(
+            step_number=step_number, url_before="https://example.test", state_before="login", state_after="login",
+            action=BrowserAction(observation_id=f"old-{step_number}", action=ActionType.TYPE, element_id=1,
+                                 text="••••••"), target=target, outcome="success",
+        ))
+    proposed = BrowserAction(observation_id="new", action=ActionType.TYPE, element_id=1, text="secret_sauce")
+    password = ObservedElement(element_id=1, role="textbox", name="Password", input_type="password", value="••••••")
+    assert _repeats_no_progress(state, proposed, password)
+
+
+def test_coerce_repairs_scroll_direction_from_rationale():
+    raw = {"page_summary": "x", "goal_progress": 0.3, "next_action": {"observation_id": "o1", "action": "scroll",
+           "rationale": "Scroll down to find products", "direction": None, "submit": True}}
+    d = ModelDecision.model_validate(_coerce(raw, obs()))
+    assert d.next_action.direction == "down" and d.next_action.submit is False
+    raw["next_action"].update(rationale="Scroll up to the search box", direction=None)
+    assert ModelDecision.model_validate(_coerce(raw, obs())).next_action.direction == "up"
+
+
+def test_regression_comparator_uses_verified_evidence_only():
+    from backend.api.comparison import compare_runs
+    from backend.schemas import RunStatus
+
+    goal = GoalSpec(raw="reach checkout")
+    baseline = AgentState(run_id="base", goal=goal, target_url="https://a.example", status=RunStatus.COMPLETED,
+                          goal_completed=True, step_count=6, accessibility_score=90)
+    baseline.journey_graph_nodes = [JourneyNode(id="a", label="Cart", url="x", route="/cart", step_number=4, page_type="cart")]
+    candidate = AgentState(run_id="cand", goal=goal, target_url="https://b.example", status=RunStatus.COMPLETED,
+                           goal_completed=True, step_count=9, accessibility_score=75)
+    candidate.friction.interruptions = 1
+    candidate.journey_graph_nodes = [
+        JourneyNode(id="b", label="Cart", url="x", route="/cart", step_number=4, page_type="cart"),
+        JourneyNode(id="c", label="Delivery", url="x", route="/shipping", step_number=7, page_type="shipping"),
+    ]
+    candidate.critic_findings = [
+        CriticFinding(category="accessibility", severity="high", title="Button has no accessible name",
+                      evidence="empty button", step_number=8, source="axe", verified=True, data={"rule": "button-name"}),
+        CriticFinding(category="friction", severity="high", title="AI guess", evidence="maybe", step_number=8,
+                      source="model", verified=False),
+    ]
+    result = compare_runs(baseline, candidate)
+    assert result["verdict"] == "regression" and result["deltas"]["actions"] == 3
+    assert result["milestones"]["added"] == ["shipping"]
+    assert [f["data"]["rule"] for f in result["new_findings"]] == ["button-name"]
+
+
+def test_active_run_report_returns_conflict_instead_of_crashing(tmp_path, monkeypatch):
+    from fastapi import HTTPException
+    from backend.api.app import run_report
+    from backend.config import settings
+    import pytest
+
+    monkeypatch.setattr(settings, "artifacts_dir", tmp_path)
+    (tmp_path / "run_live123").mkdir()
+    with pytest.raises(HTTPException) as exc:
+        run_report("live123")
+    assert exc.value.status_code == 409 and "still in progress" in exc.value.detail
+
+
+def test_semantic_cycle_becomes_action_trace_with_alternative_path(tmp_path):
+    from backend.agent.graph import RunContext, _detect_action_loop
+    from backend.schemas import TargetDescriptor
+
+    state = AgentState(goal=GoalSpec(raw="find settings"), target_url="android://device/app")
+    state.execution_history = [
+        ExecutionStep(step_number=1, url_before="a", state_before="A", state_after="B",
+                      action=BrowserAction(observation_id="o1", action=ActionType.CLICK, element_id=1,
+                                           display_label="Open menu"),
+                      target=TargetDescriptor(role="button", name="Open menu"), outcome="success"),
+        ExecutionStep(step_number=2, url_before="b", state_before="B", state_after="A",
+                      action=BrowserAction(observation_id="o2", action=ActionType.BACK,
+                                           display_label="Back"), outcome="success"),
+    ]
+    current = obs(fp="A", elements=[ObservedElement(element_id=3, role="button", name="Use search")])
+    bus = EventBus(state.run_id, tmp_path, record=False)
+    ctx = RunContext(state=state, session=None, model=None, bus=bus, run_dir=tmp_path)
+    _detect_action_loop(ctx, state.execution_history[-1], current)
+    finding = state.critic_findings[0]
+    assert finding.verified and finding.data["cycle_length"] == 2
+    assert finding.data["action_trace"] == ['1. click "Open menu"', '2. back "Back"']
+    assert finding.data["alternative_actions"] == ['button "Use search"']

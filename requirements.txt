@@ -11,3 +11,4 @@ openai>=1.50
 google-genai>=1.40
 pytest>=8
 websockets>=13
+python-multipart>=0.0.9

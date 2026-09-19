@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +15,7 @@ from backend.schemas import Event, EventType
 class EventBus:
     def __init__(self, run_id: str, run_dir: Path, record: bool = True):
         self.run_id = run_id
-        self.history: list[Event] = []
+        self.history: deque[Event] = deque(maxlen=2000)
         self._subscribers: set[asyncio.Queue] = set()
         self._t0 = time.perf_counter()
         self._seq = 0
@@ -33,11 +34,17 @@ class EventBus:
             self._file.write(ev.model_dump_json() + "\n")
             self._file.flush()
         for q in list(self._subscribers):
-            q.put_nowait(ev)
+            try:
+                q.put_nowait(ev)
+            except asyncio.QueueFull:
+                # Keep memory bounded. Dropping the oldest live item is safe because a
+                # reconnect resumes from retained history/disk using sequence numbers.
+                q.get_nowait()
+                q.put_nowait(ev)
         return ev
 
     def subscribe(self) -> asyncio.Queue:
-        q: asyncio.Queue = asyncio.Queue()
+        q: asyncio.Queue = asyncio.Queue(maxsize=256)
         self._subscribers.add(q)
         return q
 
@@ -50,7 +57,11 @@ class EventBus:
             self._file.close()
             self._file = None
         for q in list(self._subscribers):
-            q.put_nowait(None)  # sentinel: stream finished
+            try:
+                q.put_nowait(None)  # sentinel: stream finished
+            except asyncio.QueueFull:
+                q.get_nowait()
+                q.put_nowait(None)
 
 
 def load_events(path: Path) -> list[Event]:

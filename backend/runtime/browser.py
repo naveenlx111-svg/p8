@@ -18,9 +18,10 @@ from backend.schemas import AxeViolation, BrowserAction, Observation
 
 
 class BrowserSession:
-    def __init__(self, run_dir: Path, focus_words: list[str] | None = None):
+    def __init__(self, run_dir: Path, focus_words: list[str] | None = None, record_video: bool = True):
         self.run_dir = run_dir
         self.focus_words = focus_words or []  # goal vocabulary: what the user is scanning the page for
+        self.record_video = record_video
         self._pw: Playwright | None = None
         self._browser: Browser | None = None
         self._context: BrowserContext | None = None
@@ -28,18 +29,44 @@ class BrowserSession:
         self.registry: ElementRegistry | None = None
         self._shot_counter = 0
         self._new_pages: list[Page] = []
+        self._video = None
+        self.video_name: str | None = None
+
+    async def _adopt_newest_page(self) -> bool:
+        """Move attention to the newest popup without dropping delayed window.open events."""
+        if not self._new_pages:
+            return False
+        new = self._new_pages[-1]
+        self._new_pages.clear()
+        try:
+            await new.wait_for_load_state("domcontentloaded", timeout=10000)
+        except PlaywrightError:
+            pass
+        await new.bring_to_front()
+        self.page = new
+        await executor.settle(new)
+        return True
 
     async def start(self, url: str) -> None:
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self._pw = await async_playwright().start()
         self._browser = await self._pw.chromium.launch(headless=settings.headless)
+        context_options = {
+            "viewport": {"width": settings.viewport_width, "height": settings.viewport_height},
+            "locale": "en-IN",
+        }
+        if self.record_video:
+            context_options.update(
+                record_video_dir=str(self.run_dir / "video_tmp"),
+                record_video_size={"width": settings.viewport_width, "height": settings.viewport_height},
+            )
         self._context = await self._browser.new_context(
-            viewport={"width": settings.viewport_width, "height": settings.viewport_height},
-            locale="en-IN",
+            **context_options,
         )
         await self._context.add_init_script(path=str(settings.axe_path))
         self._context.on("page", lambda p: self._new_pages.append(p))  # links with target=_blank, window.open
         self.page = await self._context.new_page()
+        self._video = self.page.video
         for attempt in range(2):  # slow or throttling sites: one retry before giving up
             try:
                 await self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
@@ -50,6 +77,9 @@ class BrowserSession:
         await executor.settle(self.page)
 
     async def observe(self) -> Observation:
+        # A popup may arrive after execute() returns but before the next observation.
+        # Adopt it here instead of clearing and losing a legitimate user-visible page.
+        await self._adopt_newest_page()
         # Any previous registry expires here: its handles must not be reused.
         if self.registry:
             for h in self.registry.handles.values():
@@ -64,6 +94,9 @@ class BrowserSession:
                     raise
                 await executor.settle(self.page)
         obs.screenshot_id = await self.screenshot()
+        tree_name = f"tree_step_{self._shot_counter:02d}.txt"
+        (self.run_dir / tree_name).write_text(obs.aria_snapshot, encoding="utf-8")
+        obs.accessibility_tree_id = tree_name
         return obs
 
     async def screenshot(self) -> str:
@@ -73,19 +106,9 @@ class BrowserSession:
         return name
 
     async def execute(self, action: BrowserAction) -> ActionResult:
-        self._new_pages.clear()
         result = await executor.execute(self.page, self.registry, action, settings.action_timeout_ms)
-        if self._new_pages:
+        if await self._adopt_newest_page():
             # The action opened a new tab: a user's attention moves there, so ours does too.
-            new = self._new_pages[-1]
-            self._new_pages.clear()
-            try:
-                await new.wait_for_load_state("domcontentloaded", timeout=10000)
-            except PlaywrightError:
-                pass
-            await new.bring_to_front()
-            self.page = new
-            await executor.settle(new)
             result.note = "The action opened a new browser tab; you are now looking at that tab."
         return result
 
@@ -93,11 +116,24 @@ class BrowserSession:
         return await accessibility.run_axe(self.page, final=final)
 
     async def close(self) -> None:
-        for closer in (self._context, self._browser):
-            if closer:
-                try:
-                    await closer.close()
-                except Exception:
-                    pass  # best-effort teardown; the run result is already recorded
+        if self._context:
+            try:
+                await self._context.close()
+            except Exception:
+                pass
+        if self._video:
+            try:
+                source = Path(await self._video.path())
+                destination = self.run_dir / "journey.webm"
+                if source.exists():
+                    source.replace(destination)
+                    self.video_name = destination.name
+            except Exception:
+                pass  # video is supporting evidence; failure must not hide the run result
+        if self._browser:
+            try:
+                await self._browser.close()
+            except Exception:
+                pass  # best-effort teardown; the run result is already recorded
         if self._pw:
             await self._pw.stop()
